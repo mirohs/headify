@@ -8,6 +8,18 @@
 ///////////////////////////////////////////////////////////////////////////////
 // Strings
 
+/*
+String is shallow abstraction over C strings and C char arrays. String allows
+keeping track of a starting point in memory, a length and a capacity (0 <=
+length <= capacity). The explicit length allows dealing with parts of
+('\0'-terminated) C strings.
+
+The underlying buffer may or may not be dynamically
+allocated. The xappend... ("extensible append") functions dynamically reallocate
+memory if necessary. Therefore, when using these functinos, the buffer must
+point to the beginning of a dynamically allocated memory block.
+*/
+
 String make_string(char* s) {
     require_not_null(s);
     int len = strlen(s);
@@ -33,29 +45,35 @@ String new_string(int cap) {
     return (String) {xmalloc(cap), 0, cap};
 }
 
-bool append_string(String* str, String t) {
+/*
+Appends t to str. Fails if the result would not fit into str.
+*/
+void append_string(String* str, String t) {
     require_not_null(str);
     int n = str->len + t.len;
     panic_if(n > str->cap, "append_string overflow");
-    if (n > str->cap) return false;
     memcpy(str->s + str->len, t.s, t.len);
     str->len = n;
-    return true;
 }
 
-bool append_cstring(String* str, char* t) {
+/*
+Appends t to str. Fails if the result would not fit into str.
+*/
+void append_cstring(String* str, char* t) {
     require_not_null(str);
     require_not_null(t);
     int t_len = strlen(t);
     int n = str->len + t_len;
     panic_if(n > str->cap, "append_cstring overflow");
-    if (n > str->cap) return false;
     memcpy(str->s + str->len, t, t_len);
     str->len = n;
-    return true;
 }
 
-bool append_cstring2(String* str, char* s, char* t) {
+/*
+Appends the chars from s (inclusive) to t (exclusive) to str. Fails if the
+result would not fit into str.
+*/
+void append_cstring2(String* str, char* s, char* t) {
     require_not_null(str);
     require_not_null(s);
     require_not_null(t);
@@ -63,21 +81,24 @@ bool append_cstring2(String* str, char* s, char* t) {
     int st_len = t - s;
     int n = str->len + st_len;
     panic_if(n > str->cap, "append_cstring overflow");
-    if (n > str->cap) return false;
     memcpy(str->s + str->len, s, st_len);
     str->len = n;
-    return true;
 }
 
-bool append_char(String* str, char c) {
+/*
+Appends c to str. Fails if the result would not fit into str.
+*/
+void append_char(String* str, char c) {
     require_not_null(str);
     panic_if(str->len >= str->cap, "append_char overflow");
-    if (str->len >= str->cap) return false;
     str->s[str->len] = c;
     str->len++;
-    return true;
 }
 
+/*
+Appends t to str. Extends the underlying buffer if the capacity is exhausted.
+Thus str->s must point to the beginning of a dynamically allocated memory block.
+*/
 void xappend_string(String* str, String t) {
     require_not_null(str);
     int n = str->len + t.len;
@@ -92,6 +113,10 @@ void xappend_string(String* str, String t) {
     str->len = n;
 }
 
+/*
+Appends t to str. Extends the underlying buffer if the capacity is exhausted.
+Thus str->s must point to the beginning of a dynamically allocated memory block.
+*/
 void xappend_cstring(String* str, char* t) {
     require_not_null(str);
     require_not_null(t);
@@ -108,6 +133,11 @@ void xappend_cstring(String* str, char* t) {
     str->len = n;
 }
 
+/*
+Appends the chars from s (incluisive) to t (exclusive) to str. Extends the
+underlying buffer if the capacity is exhausted.  Thus str->s must point to the
+beginning of a dynamically allocated memory block.
+*/
 void xappend_cstring2(String* str, char* s, char* t) {
     require_not_null(str);
     require_not_null(s);
@@ -126,6 +156,10 @@ void xappend_cstring2(String* str, char* s, char* t) {
     str->len = n;
 }
 
+/*
+Appends c to str. Extends the underlying buffer if the capacity is exhausted.
+Thus str->s must point to the beginning of a dynamically allocated memory block.
+*/
 void xappend_char(String* str, char c) {
     require_not_null(str);
     if (str->len >= str->cap) {
@@ -156,9 +190,8 @@ void append_test(void) {
     free(s.s);
 
     s = make_string("abc");
-    bool b = append_char(&s, 'x');
+    // would oveflow: b = append_char(&s, 'x');
     test_equal_s(s, "abc");
-    test_equal_i(b, 0); // false
 }
 
 void xappend_test(void) {
@@ -195,9 +228,15 @@ adapted.
 String trim(String str) {
     int left = 0, right = str.len - 1;
     for (; left < str.len && (str.s[left] == ' ' || str.s[left] == '\t' ); left++);
+    // 0 <= left <= str.len
     for (; right >= left && (str.s[right] == ' ' || str.s[right] == '\t' ); right--);
-    if (left > right) return (String){"", 0};
-    return (String){str.s + left, right - left + 1};
+    // -1 <= left - 1 <= right <= str.len - 1
+    int len = right - left + 1;
+    // 0 <= right - left + 1 <= str.len - left
+    // 0 <= len <= str.len - left <= str.len
+    assert("not negative", len >= 0);
+    assert("not larger", len <= str.len);
+    return (String){str.s + left, len, str.cap - left};
 }
 
 void trim_test(void) {
@@ -220,10 +259,15 @@ Removes spaces and tabs from the beginning of str. The underlying content is not
 modified, but the String is appropriately shifted and the length adapted.
 */
 String trim_left(String str) {
-    int left = 0, right = str.len - 1;
+    int left = 0;
     for (; left < str.len && (str.s[left] == ' ' || str.s[left] == '\t' ); left++);
-    if (left > right) return (String){"", 0};
-    return (String){str.s + left, right - left + 1};
+    // 0 <= left <= str.len
+    int len = str.len - left;
+    // 0 <= len <= str.len
+    assert("not negative", len >= 0);
+    assert("not larger", len <= str.len);
+    // capacity only shrinks from left
+    return (String){str.s + left, len, str.cap - left};
 }
 
 void trim_left_test(void) {
@@ -246,10 +290,15 @@ Removes spaces and tabs from the end of str. The underlying content is not
 modified, but the String is appropriately shifted and the length adapted.
 */
 String trim_right(String str) {
-    int left = 0, right = str.len - 1;
-    for (; right >= left && (str.s[right] == ' ' || str.s[right] == '\t' ); right--);
-    if (left > right) return (String){"", 0};
-    return (String){str.s + left, right - left + 1};
+    int right = str.len - 1;
+    for (; right >= 0 && (str.s[right] == ' ' || str.s[right] == '\t' ); right--);
+    // -1 <= right <= str.len - 1
+    int len = right + 1;
+    // 0 <= right <= str.len
+    assert("not negative", len >= 0);
+    assert("not larger", len <= str.len);
+    // capacity does not change when trimming right
+    return (String){str.s, len, str.cap};
 }
 
 void trim_right_test(void) {
@@ -390,10 +439,6 @@ void write_file(char* name, String data) {
     fclose(f);
     panicf_if(n_written != data.len, "Cannot write data to file %s.", name); 
 }
-
-
-
-
 
 /*
 Splits the string using the given separator character. Does not modify the

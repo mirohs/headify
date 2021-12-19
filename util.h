@@ -27,10 +27,10 @@ String make_string2(char* s, int len);
 String make_string3(char* s, int len, int cap);
 String new_string(int cap);
 
-bool append_string(String* str, String t);
-bool append_cstring(String* str, char* t);
-bool append_cstring2(String* str, char* s, char* t);
-bool append_char(String* str, char c);
+void append_string(String* str, String t);
+void append_cstring(String* str, char* t);
+void append_cstring2(String* str, char* s, char* t);
+void append_char(String* str, char c);
 void append_test(void);
 
 void xappend_string(String* str, String t);
