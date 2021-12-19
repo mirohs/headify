@@ -452,19 +452,21 @@ const PhraseState phrases[PhraseStateCount][8] = {
   {s12,s13,s12,s12,s12,s14,s14,s14}, // s12: pub? tok+ b[]+ asg
   {s13,s13,s13,s13,s13,s13,s13,s13}, // s13: pub? tok+ b[]+ asg !sem* sem -> arr_def
   {s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
-  {s15,s16,s15,s15,s15,s15,s15,s14}, // s15: pub? tok("struct"|"union")
+  {s20,s14,s14,s21,s14,s14,s14,s14}, // s15: pub? tok("struct"|"union")
   {s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_or_union_def
   {s17,s18,s17,s17,s17,s17,s17,s14}, // s17: pub? tok("typedef")
   {s18,s18,s18,s18,s18,s18,s18,s18}, // s18: type_def
   {s19,s19,s19,s19,s19,s19,s19,s19}, // s19: pub? pre
+  {s14,s16,s14,s21,s14,s14,s14,s14}, // s20: pub? tok("struct"|"union") tok
+  {s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
 };
 
 /*
 Returns the next phrase starting at the given element.
 */
 Phrase get_phrase(Element* list) {
+    require_not_null(list);
     Element* e = list;
-    if (e == NULL) return (Phrase){error, false, NULL, NULL};
     if (e->type == pre) return (Phrase){preproc, false, e, e};
     if (e->type == lco) return (Phrase){line_comment, false, e, e};
     if (e->type == bco) return (Phrase){block_comment, false, e, e};
@@ -584,6 +586,12 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_cstring(&head, "phrase = ");
         if (DEBUG) xappend_cstring(&head, (char*)PhraseTypeNames[phrase.type]);
         if (DEBUG) xappend_char(&head, '\n');
+        if (phrase.type == error) {
+            if (phrase.last != NULL) e = phrase.last;
+            int line = count_lines(list->begin, e->end) + 1;
+            fprintf(stderr, "%s:%d: Error\n", basename.s, line);
+            exit(EXIT_FAILURE);
+        }
         if (phrase.is_public) {
             Element* first = phrase.first->next; // skip pub
             Element* last = phrase.last;
@@ -671,6 +679,12 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_cstring(&impl, "phrase = ");
         if (DEBUG) xappend_cstring(&impl, (char*)PhraseTypeNames[phrase.type]);
         if (DEBUG) xappend_char(&impl, '\n');
+        if (phrase.type == error) {
+            if (phrase.last != NULL) e = phrase.last;
+            int line = count_lines(list->begin, e->end) + 1;
+            fprintf(stderr, "%s:%d: Error\n", basename.s, line);
+            exit(EXIT_FAILURE);
+        }
         if (phrase.is_public) {
             Element* first = phrase.first->next; // skip pub
             Element* last = phrase.last;
