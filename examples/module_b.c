@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include "module_a_headify.h"
 #include "module_b_headify.h"
 
@@ -13,6 +12,7 @@ struct Pair {
     return (Pair) { x, y };
 }
 
+*// My line comment.
 *int pair_x(Pair p) {
     return p.x;
 }
@@ -21,6 +21,9 @@ struct Pair {
     return p.y;
 }
 
+*/*
+Myblock comment.
+*/
 int main(void) {
     set_a(3, 123);
     printf("%d\n", get_a(3));
