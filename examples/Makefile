@@ -12,6 +12,9 @@ EXEFILES2 = $(CFILES:.c=)
 # disable default suffixes
 .SUFFIXES:
 
+module_b_headify: module_b_headify.o module_a_headify.o
+	gcc $(CFLAGS) $(DEBUG) module_b_headify.o module_a_headify.o -lm -o $@
+
 # pattern rule for compiling .c-file to executable
 %: %.o ../util.o
 	gcc $(CFLAGS) $(DEBUG) $< ../util.o -lm -o $@
@@ -33,3 +36,4 @@ clean:
 	rm -rf *.dSYM
 	rm -f $(EXEFILES)
 	rm -f $(EXEFILES2)
+	rm -f *_headify.[ch]
