@@ -143,7 +143,7 @@ const ElementType states[ElementTypeCount][15] = { // rows: states, columns: inp
     {bci,bci,bci,bci,bci,bci,bci,bci,bcf,bci,bci,bci,bci,bci,bci}, // bci block_comment_in_ind
     {str,chr,bcf,pre,sem,lbr,lco,bci,tok,ind,bra,bra,asg,pub,tok}, // bcf block_comment_in_ind_end
     {str,chr,sem,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // sem semicolon
-    {str,chr,lbr,pre,sem,lbr,lco,bci,tok,ind,bra,bra,asg,pub,tok}, // lbr line_break
+    {str,chr,lbr,pre,sem,lbr,lco,bci,pub,ind,bra,bra,asg,pub,tok}, // lbr line_break
     {bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra}, // bra braces
     {str,chr,bre,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // bre braces_end
     {str,chr,asg,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // asg assign
@@ -474,11 +474,14 @@ Phrase get_phrase(Element* list) {
     PhraseState prev_state = s01;
     bool public = false;
     while (true) {
-        e = skip_whi_lbr_ind_lco_bco(e);
+        e = skip_whi_lbr_ind(e);
         if (e == NULL) break;
         int input = 0;
         // element types: ind, tok, whi, pre, lco, bco, sem, lbr, bra, asg, pub
         // element types: tok, pre, sem, bra, asg, pub
+        // printf("%s: ", ElementTypeName[e->type]);
+        // String ec = make_string2(e->begin, e->end - e->begin);
+        // println_string(ec);
         switch (e->type) {
             case tok: input = 0; break;
             case sem: input = 1; break;
@@ -490,6 +493,12 @@ Phrase get_phrase(Element* list) {
         }
         // printf("input = %d\n", input);
         if (input < 0) {
+            // printf("%d, %s\n", input, ElementTypeName[e->type]);
+            if (e->type == lco) {
+                return (Phrase){line_comment, public, list, e};
+            } else if (e->type == bco) {
+                return (Phrase){block_comment, public, list, e};
+            }
             return (Phrase){error, public, e, e};
         }
         assert("valid input", 0 <= input && input < 8);
@@ -624,8 +633,12 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
                     xappend_cstring2(&head, first->begin, last->end);
                     xappend_char(&head, '\n');
                     break;
+                case line_comment:
+                case block_comment:
+                    xappend_cstring2(&head, first->begin, last->end);
+                    xappend_char(&head, '\n');
+                    break;
                 default:
-                    // not handled: error, preproc, line_comment, block_comment
                     xappend_cstring(&head, "// phrase ");
                     xappend_cstring(&head, (char*)PhraseTypeNames[phrase.type]);
                     xappend_cstring(&head, " NOT HANDLED\n");
