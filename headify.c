@@ -633,6 +633,21 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
     return head;
 }
 
+String fun_name(Phrase phrase) {
+    if (phrase.type == fun_def || phrase.type == fun_dec) {
+        // last token in phrase is function name
+        Element* token = NULL;
+        for (Element* e = phrase.first; e != NULL && e != phrase.last; e = e->next) {
+            if (e->type == tok) {
+                token = e;
+            }
+        };
+        if (token != NULL) {
+            return make_string2(token->begin, token->end - token->begin);
+        }
+    }
+    return make_string("");
+}
 /*
 Creates implementation file contents for the given list of elements. Maintain
 the line numbers line numbers of the original contents.
@@ -685,10 +700,16 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
             if (DEBUG) xappend_cstring2(&impl, first->begin, last->end);
             if (DEBUG) xappend_char(&impl, '\n');
             switch (phrase.type) {
-                case var_dec:
-                case var_def:
                 case fun_dec:
                 case fun_def:
+                    // do not put "static" in front of the main function
+                    if (!cstring_equal(fun_name(phrase), "main")) {
+                        xappend_cstring(&impl, "static ");
+                    }
+                    xappend_cstring2(&impl, first->begin, last->end);
+                    break;
+                case var_dec:
+                case var_def:
                 case arr_dec:
                 case arr_def:
                     xappend_cstring(&impl, "static ");
