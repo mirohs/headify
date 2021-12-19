@@ -422,8 +422,8 @@ line break.
 void print_phrase(Phrase* phrase) {
     require_not_null(phrase);
     printf("[%s%s:", phrase->is_public ? "*" : "", PhraseTypeNames[phrase->type]);
-    Element* e = phrase->begin;
-    Element* f = phrase->end;
+    Element* e = phrase->first;
+    Element* f = phrase->last;
     if (e != NULL && f != NULL) {
         char* p = e->begin;
         char* q = f->end;
@@ -530,7 +530,7 @@ void print_phrases(Element* list) {
         Phrase phrase = get_phrase(e);
         // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
         print_phrase(&phrase);
-        e = phrase.end;
+        e = phrase.last;
         if (e == NULL) break;
         e = e->next;
     }
@@ -540,15 +540,15 @@ void print_phrases(Element* list) {
 Starting from begin, appends the contents of all elements until stop returns
 true. Does not append the contents of the element for which stop returns true.
 */
-void xappend_string_until(String* str, Element* begin, bool stop(Element*)) {
-    if (begin == NULL || stop(begin)) return;
-    Element* end = begin;
-    for (Element* e = begin; e != NULL && !stop(e); e = e->next) {
+void xappend_string_until(String* str, Element* first, bool stop(Element*)) {
+    if (first == NULL || stop(first)) return;
+    Element* last = first;
+    for (Element* e = first; e != NULL && !stop(e); e = e->next) {
         if (e->type != whi) {
-            end = e;
+            last = e;
         }
     }
-    xappend_cstring2(str, begin->begin, end->end);
+    xappend_cstring2(str, first->begin, last->end);
 }
 
 /*
@@ -585,35 +585,35 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_cstring(&head, (char*)PhraseTypeNames[phrase.type]);
         if (DEBUG) xappend_char(&head, '\n');
         if (phrase.is_public) {
-            Element* begin = phrase.begin->next; // skip pub
-            Element* end = phrase.end;
-            if (DEBUG) xappend_cstring2(&head, begin->begin, end->end);
+            Element* first = phrase.first->next; // skip pub
+            Element* last = phrase.last;
+            if (DEBUG) xappend_cstring2(&head, first->begin, last->end);
             if (DEBUG) xappend_char(&head, '\n');
             switch (phrase.type) {
                 case var_dec:
                 case arr_dec:
                     xappend_cstring(&head, "extern ");
-                    xappend_cstring2(&head, begin->begin, end->end);
+                    xappend_cstring2(&head, first->begin, last->end);
                     xappend_char(&head, '\n');
                     break;
                 case fun_dec:
                 case preproc:
-                    xappend_cstring2(&head, begin->begin, end->end);
+                    xappend_cstring2(&head, first->begin, last->end);
                     xappend_char(&head, '\n');
                     break;
                 case fun_def:
-                    xappend_string_until(&head, begin, is_curly);
+                    xappend_string_until(&head, first, is_curly);
                     xappend_cstring(&head, ";\n");
                     break;
                 case var_def:
                 case arr_def:
                     xappend_cstring(&head, "extern ");
-                    xappend_string_until(&head, begin, is_asg);
+                    xappend_string_until(&head, first, is_asg);
                     xappend_cstring(&head, ";\n");
                     break;
                 case struct_or_union_def:
                 case type_def:
-                    xappend_cstring2(&head, begin->begin, end->end);
+                    xappend_cstring2(&head, first->begin, last->end);
                     xappend_char(&head, '\n');
                     break;
                 default:
@@ -625,7 +625,7 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
             }
         }
         //print_phrase(&phrase);
-        e = phrase.end;
+        e = phrase.last;
         if (e == NULL) break;
         e = e->next;
     }
@@ -657,9 +657,9 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_cstring(&impl, (char*)PhraseTypeNames[phrase.type]);
         if (DEBUG) xappend_char(&impl, '\n');
         if (phrase.is_public) {
-            Element* begin = phrase.begin->next; // skip pub
-            Element* end = phrase.end;
-            if (DEBUG) xappend_cstring2(&impl, begin->begin, end->end);
+            Element* first = phrase.first->next; // skip pub
+            Element* last = phrase.last;
+            if (DEBUG) xappend_cstring2(&impl, first->begin, last->end);
             switch (phrase.type) {
                 case var_dec:
                 case var_def:
@@ -667,22 +667,22 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
                 case fun_def:
                 case arr_dec:
                 case arr_def:
-                    xappend_cstring2(&impl, begin->begin, end->end);
+                    xappend_cstring2(&impl, first->begin, last->end);
                     break;
                 case struct_or_union_def:
                 case type_def:
                 case preproc:
-                    lines = count_lines(begin->begin, end->end);
+                    lines = count_lines(first->begin, last->end);
                     for (int i = 0; i < lines; i++) xappend_char(&impl, '\n');
                     break;
                 default:
-                    xappend_cstring2(&impl, begin->begin, end->end);
+                    xappend_cstring2(&impl, first->begin, last->end);
                     break;
             }
         } else { // not public
-            Element* begin = phrase.begin;
-            Element* end = phrase.end;
-            if (DEBUG) xappend_cstring2(&impl, begin->begin, end->end);
+            Element* first = phrase.first;
+            Element* last = phrase.last;
+            if (DEBUG) xappend_cstring2(&impl, first->begin, last->end);
             if (DEBUG) xappend_char(&impl, '\n');
             switch (phrase.type) {
                 case var_dec:
@@ -692,20 +692,20 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
                 case arr_dec:
                 case arr_def:
                     xappend_cstring(&impl, "static ");
-                    xappend_cstring2(&impl, begin->begin, end->end);
+                    xappend_cstring2(&impl, first->begin, last->end);
                     break;
                 case struct_or_union_def:
                 case type_def:
                 case preproc:
-                    xappend_cstring2(&impl, begin->begin, end->end);
+                    xappend_cstring2(&impl, first->begin, last->end);
                     break;
                 default:
-                    xappend_cstring2(&impl, begin->begin, end->end);
+                    xappend_cstring2(&impl, first->begin, last->end);
                     break;
             }
         }
         //print_phrase(&phrase);
-        e = phrase.end;
+        e = phrase.last;
         if (e == NULL) break;
         e = e->next;
     }
@@ -764,7 +764,7 @@ int main(int argc, char* argv[]) {
         Phrase phrase = get_phrase(e);
         // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
         print_phrase(&phrase);
-        e = phrase.end;
+        e = phrase.last;
         if (e == NULL) break;
         e = e->next;
     }

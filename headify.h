@@ -95,9 +95,10 @@ enum PhraseType {
 typedef struct Phrase Phrase;
 struct Phrase {
     PhraseType type;
-    bool is_public;
-    Element* begin;
-    Element* end;
+    bool is_public; // is this a public phrase (to appear in the header file)?
+    // first..last is a linked list of elements belonging to this phrase
+    Element* first; // first element of phrase (inclusive)
+    Element* last; // last element of phrase (inclusive)
 };
 
 #endif // headify_h_INCLUDED
