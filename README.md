@@ -1,6 +1,6 @@
 # headify
 
-## Automatically create header files from C files.
+## Automatically extract header files from C files.
 
 C requires maintaining both an implementation (.c) file and a header (.h) file. Manually keeping them consistent is tedious. *Headify* is a tool that automatically extracts header files from C files. 
 
