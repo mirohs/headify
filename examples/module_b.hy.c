@@ -2,26 +2,26 @@
 #include "module_a.h"
 #include "module_b.h"
 
-
+*typedef struct Pair Pair;
 struct Pair {
     int x;
     int y;
 };
 
-Pair make_pair(int x, int y) {
+*Pair make_pair(int x, int y) {
     return (Pair) { x, y };
 }
 
-// My line comment.
-int pair_x(Pair p) {
+*// My line comment.
+*int pair_x(Pair p) {
     return p.x;
 }
 
-int pair_y(Pair p) {
+*int pair_y(Pair p) {
     return p.y;
 }
 
-/*
+*/*
 Myblock comment.
 */
 int main(void) {

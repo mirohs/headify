@@ -785,6 +785,8 @@ int main(int argc, char* argv[]) {
     if (iext < 0) iext = filename.len;
     String dirname = make_string2(filename.s, idir);
     String basename = make_string2(filename.s + idir, iext - idir);
+    bool ends_with_hy = ends_with(basename, make_string(".hy"));
+    if (ends_with_hy) basename.len -= 3;
     if (basename.len <= 0) {
         printf("Usage: headify <filename C file>\n");
         exit(EXIT_FAILURE);
@@ -823,7 +825,11 @@ int main(int argc, char* argv[]) {
     String headname = new_string(256);
     xappend_string(&headname, dirname);
     xappend_string(&headname, basename);
-    xappend_cstring(&headname, "_headify.h");
+    if (ends_with_hy) {
+        xappend_cstring(&headname, ".h");
+    } else {
+        xappend_cstring(&headname, "_headify.h");
+    }
     xappend_char(&headname, '\0');
     write_file(headname.s, head);
     free(headname.s);
@@ -833,7 +839,11 @@ int main(int argc, char* argv[]) {
     String implname = new_string(256);
     xappend_string(&implname, dirname);
     xappend_string(&implname, basename);
-    xappend_cstring(&implname, "_headify.c");
+    if (ends_with_hy) {
+        xappend_cstring(&implname, ".c");
+    } else {
+        xappend_cstring(&implname, "_headify.c");
+    }
     xappend_char(&implname, '\0');
     write_file(implname.s, impl);
     free(implname.s);
