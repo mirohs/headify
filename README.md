@@ -10,14 +10,14 @@ To support automatic extraction, a *public* specifier in the form of a single `*
 
 The following examples illustrate the idea.
 
-### module\_a.c
+### module\_a.hy.c
 
 The file `module_a.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
 
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include "module_a_headify.h"
+#include "module_a.h"
 
 #define N 10
 int a[N];
@@ -46,9 +46,9 @@ int main(void) {
 }
 ```
 
-### module\_a\_headify.h
+### module\_a.h
 
-The command `headify module_a.c` generates the header file `module_a_headify.h` and the implementation file `module_a_headify.c`. These can then be compiled. Only the public entities appear in the header file.
+The command `headify module_a.hy.c` generates the header file `module_a.h` and the implementation file `module_a.c`. These can then be compiled. Only the public entities appear in the header file.
 
 ```c
 #ifndef module_a_h_INCLUDED
@@ -58,14 +58,14 @@ void set_a(int i, int x);
 #endif
 ```
 
-### module\_a\_headify.c
+### module\_a.c
 
 In the implementation file, entities that are not explicitly marked as public (`*`) are prefixed with the keyword `static`, which means that this entity is private to the translation unit and cannot be accessed from other translation units. The `main` function is treated specially, because it should never be prefixed with `static`.
 
 ```c
 #include <stdio.h>
 #include <stdlib.h>
-#include "module_a_headify.h"
+#include "module_a.h"
 
 #define N 10
 static int a[N];
@@ -94,14 +94,14 @@ int main(void) {
 }
 ```
 
-### module\_b.c
+### module\_b.hy.c
 
 Let's have a look at a second module, which uses the first one. 
 
 ```c
 #include <stdio.h>
-#include "module_a_headify.h"
-#include "module_b_headify.h"
+#include "module_a.h"
+#include "module_b.h"
 
 *typedef struct Pair Pair;
 struct Pair {
@@ -132,10 +132,10 @@ int main(void) {
 
 The type definition is marked as public, but not the structure itself. Hence, the structure is an opaque entity in the interface, which is beneficial for information hiding. The constructor function `make_pair`and the two accessor functions `pair_x` and `pair_y` are also marked as public.
 
-The command `headify module_b.c` will generate `module_b_headify.h` and  `module_b_headify.c`. 
+The command `headify module_b.hy.c` will generate `module_b.h` and  `module_b.c`. 
 
 
-### module\_b\_headify.h
+### module\_b.h
 
 ```c
 #ifndef module_b_h_INCLUDED
@@ -147,14 +147,14 @@ int pair_y(Pair p);
 #endif
 ```
 
-### module\_b\_headify.c
+### module\_b.c
 
 In the implementation file, the type definition no longer appears, because it has moved to the header file. However, the line numbers are preserved to enable locating line numbers in compiler error messages in the original `.c` file. 
 
 ```c
 #include <stdio.h>
-#include "module_a_headify.h"
-#include "module_b_headify.h"
+#include "module_a.h"
+#include "module_b.h"
 
 
 struct Pair {
