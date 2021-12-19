@@ -191,12 +191,12 @@ The transformation that `headify`performs, depend on the type of the entity and 
 | --- | --- | --- | --- | 
 | function definition | yes | function declaration | function definition |
 | function definition | no | - | `static` function definition |
-| function declaration | yes | function declaration | - |
-| function declaration | no | - | function declaration |
+| function declaration | yes | function declaration | function declaration |
+| function declaration | no | - | `static` function declaration |
 | variable definition | yes | `extern` variable declaration | variable definition |
 | variable definition | no | - | `static` variable definition |
-| variable declaration | yes | `extern` variable declaration | variable declaratioon |
-| variable declaration | no | - | static variable declaration |
+| variable declaration | yes | `extern` variable declaration | variable declaration |
+| variable declaration | no | - | `static` variable declaration |
 | struct or union | yes | struct or union | - |
 | struct or union | no | - | struct or union |
 | type definition | yes | type definition | - |
