@@ -42,6 +42,7 @@ headify
 *.su
 *.idb
 *.pdb
+notes.txt
 
 # Kernel Module Compile Results
 *.mod*
