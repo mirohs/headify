@@ -77,6 +77,18 @@ union UnionPrivate {
     float f;
 };
 
+// Entity | Public | Header File | Implementation File
+// enum   | yes    | enum        | -
+*enum PublicEnum {
+    A, B, C
+};
+
+// Entity | Public | Header File | Implementation File
+// enum   | no     | -           | enum
+enum PrivateEnum {
+    D, E, F
+};
+
 // Entity         | Public | Header File     | Implementation File
 // type definition | yes   | type definition | -
 *typedef struct StructPublic TypedefPublic;

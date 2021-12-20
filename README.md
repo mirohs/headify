@@ -4,7 +4,7 @@
 
 C requires maintaining both an implementation (.c) file and a header (.h) file. Manually keeping them consistent is tedious. *Headify* is a tool that automatically extracts header files from C files. 
 
-To support automatic extraction, a *public* specifier in the form of a single `*` character is introduced. It is only parsed as a *public* specifier if it appears before any other tokens at the beginning of a line. This allows for simple information hiding in modules (translation units). Any entity that is not explicitly marked as *public* will be treated as a private entity of the module. 
+To support automatic extraction, a *public* specifier in the form of a single `*` character is introduced. It is only parsed as a *public* specifier if it appears before any other tokens at the beginning of a line. Any entity that is not explicitly marked as *public* will be treated as a private entity of the module. This allows for simple information hiding in modules (translation units).
 
 ## Examples
 
@@ -12,7 +12,7 @@ The following examples illustrate the idea.
 
 ### module\_a.hy.c
 
-The file `module_a.hy.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
+The file `module_a.hy.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both functions are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
 
 ```c
 #include <stdio.h>
@@ -60,7 +60,7 @@ void set_a(int i, int x);
 
 ### module\_a.c
 
-In the implementation file, entities that are not explicitly marked as public (`*`) are prefixed with the keyword `static`, which means that this entity is private to the translation unit and cannot be accessed from other translation units. The `main` function is treated specially, because it should never be prefixed with `static`.
+In the implementation file, entities that are not explicitly marked as public (`*`) are prefixed with the keyword `static`, which means that these entities are private to the translation unit and cannot be accessed from other translation units. The `main` function is treated specially, because it should never be prefixed with `static`.
 
 ```c
 #include <stdio.h>
@@ -149,7 +149,7 @@ int pair_y(Pair p);
 
 ### module\_b.c
 
-In the implementation file, the type definition no longer appears, because it has moved to the header file. However, the line numbers are preserved to enable locating line numbers in compiler error messages in the original `.c` file. 
+In the implementation file, the type definition no longer appears, because it has moved to the header file. The line numbers are preserved (by keeping the line breaks after after any removed entities), so that line numbers in compiler error messages are meaningful in the original `.c` file. 
 
 ```c
 #include <stdio.h>
@@ -185,7 +185,7 @@ int main(void) {
 
 ## Transformations
 
-The transformation that `headify`performs, depend on the type of the entity and whether it is marked as public or not. The table shows each of the possible entities.
+The transformation that *headify* performs, depend on the type of the entity and whether it is marked as public or not. The table shows each of the possible entities.
 
 | Entity | Public | Header File | Implementation File |
 | --- | --- | --- | --- | 
@@ -199,6 +199,8 @@ The transformation that `headify`performs, depend on the type of the entity and 
 | variable declaration | no | - | `static` variable declaration |
 | struct or union | yes | struct or union | - |
 | struct or union | no | - | struct or union |
+| enum | yes | enum | - |
+| enum | no | - | enum |
 | type definition | yes | type definition | - |
 | type definition | no | - | type definition |
 | preprocessor directive | yes | preprocessor directive | - |

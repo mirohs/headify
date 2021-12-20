@@ -509,7 +509,7 @@ Phrase get_phrase(Element* list) {
             case s02: public = true; break;
             case s03: if (prev_state != s03) {
                     String s = make_string2(e->begin, e->end - e->begin);
-                    if (cstring_equal(s, "struct") || cstring_equal(s, "union")) {
+                    if (cstring_equal(s, "struct") || cstring_equal(s, "union") || cstring_equal(s, "enum")) {
                         state = s15;
                     } else if (cstring_equal(s, "typedef")) {
                         state = s17;
