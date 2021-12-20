@@ -19,8 +19,8 @@ module_b: module_b.o module_a.o
 %: %.o ../util.o
 	gcc $(CFLAGS) $(DEBUG) $^ -lm -o $@
 	
-%.c: %.d.c
-	../embrace $< > $@
+%.hy.c: %.d.c
+	../../embrace/embrace $< > $@
 
 %.c: %.hy.c
 	../headify $<

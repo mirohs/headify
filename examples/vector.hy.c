@@ -6,25 +6,25 @@ make vector && ./vector
 #include "util.h"
 #include "vector.h"
 
+*typedef struct {
+    int capacity;
+    int count;
+    int* data; }
+Vector;
 
-
-
-
-
-
-Vector* vector_new(int capacity) {
+*Vector* vector_new(int capacity) {
     Vector* v = xcalloc(1, sizeof(Vector));
     v->capacity= capacity;
     v->data = xcalloc(v->capacity, sizeof(int));
     v->count = 0;
     return v; }
 
-void vector_free(Vector* v) {
+*void vector_free(Vector* v) {
     free(v->data);
     free(v); 
 };
 
-static void vector_add(Vector* v, int x) {
+void vector_add(Vector* v, int x) {
     if(v->count >= v->capacity ) {
         v->capacity *= 2;
         fprintf(stderr, "reallocating, new capacity: %d ints\n", v->capacity);
@@ -36,17 +36,17 @@ static void vector_add(Vector* v, int x) {
     v->data[v->count++] = x; 
 };
 
-int vector_count(Vector* v) {
+*int vector_count(Vector* v) {
     return v->count; }
 
-static int vector_get(Vector* v, int i) {
+int vector_get(Vector* v, int i) {
     if(i < 0 || i >= v->count ) {
         fprintf(stderr, "error: index out of bounds\n");
         exit(1); 
     };
     return v->data[i]; }
 
-int main(void) {
+*int main(void) {
     srand(time(NULL));
     Vector* v = vector_new(2);
     for(int i = 0; i < 100; i++ ) {
