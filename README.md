@@ -12,7 +12,7 @@ The following examples illustrate the idea.
 
 ### module\_a.hy.c
 
-The file `module_a.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
+The file `module_a.hy.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
 
 ```c
 #include <stdio.h>
