@@ -89,7 +89,7 @@ enum PhraseState {
 
 typedef enum PhraseType PhraseType;
 enum PhraseType {
-    error, fun_dec, fun_def, var_dec, var_def, arr_dec, arr_def, 
+    unknown, error, fun_dec, fun_def, var_dec, var_def, arr_dec, arr_def, 
     struct_or_union_def, type_def, preproc, line_comment, block_comment
 };
 
@@ -101,5 +101,35 @@ struct Phrase {
     Element* first; // first element of phrase (inclusive)
     Element* last; // last element of phrase (inclusive)
 };
+
+typedef struct State State;
+typedef State (*StateTransition)(State state);
+
+struct State {
+    Element* input;
+    Phrase phrase;
+};
+
+void f_start(State* state);
+void f_pub(State* state);
+void f_tok(State* state);
+void f_tok_paren(State* state);
+void f_tok_paren_sem(State* state); // fun_dec	
+void f_tok_paren_curly(State* state); // fun_def
+void f_tok_sem(State* state); // var_dec
+void f_tok_asg(State* state);
+void f_tok_asg_sem(State* state); // var_def
+void f_tok_bracket(State* state);
+void f_tok_bracket_sem(State* state); // arr_dec
+void f_tok_bracket_asg(State* state);
+void f_tok_bracket_asg_sem(State* state); // arr_def
+void f_struct_union_enum(State* state);
+void f_struct_union_enum_tok(State* state);
+void f_struct_union_enum_curly(State* state);
+void f_struct_union_enum_sem(State* state); // struct_union_enum_def
+void f_typedef(State* state);
+void f_typedef_sem(State* state); // typedef_def
+void f_pre(State* state); // preproc
+void f_err(State* state); // error
 
 #endif // headify_h_INCLUDED

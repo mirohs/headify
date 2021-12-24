@@ -3,6 +3,8 @@
 @date: December 6, 2021
 */
 
+// https://www.freecodecamp.org/news/how-to-delete-a-git-branch-both-locally-and-remotely/
+
 #include "util.h"
 #include "headify.h"
 
@@ -264,6 +266,7 @@ ElementList get_elements(char* filename, String source_code) {
             if (end > begin) {
                 if (prev_state == ind || prev_state == tok || prev_state == whi 
                         || prev_state == pre || prev_state == lco) {
+                    //if (tok == "struct")...
                     elements_append(&elements, new_element(prev_state, begin, end, NULL));
                     begin = end;
                 }
@@ -461,10 +464,288 @@ const PhraseState phrases[PhraseStateCount][8] = {
   {s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
 };
 
+State* next(State* s) {
+    Element* e = s->input;
+    require("valid input", e == NULL || (e->type != whi && e->type != lbr && e->type != ind));
+    if (e == NULL) return s;
+    e = e->next;
+    e = skip_whi_lbr_ind(e);
+    s->input = e;
+    ensure("valid input", e == NULL || (e->type != whi && e->type != lbr && e->type != ind));
+    return s;
+}
+
+ElementType symbol(State* s) {
+    Element* e = s->input;
+    if (e == NULL) return -1;
+    return e->type;
+}
+
+void f_start000(State* state) {
+    Element* e = state->input;
+    // skip initial whitespace
+    state->input = skip_whi_lbr_ind(state->input);
+    f_start(state); 
+    Phrase* p = &state->phrase;
+    if (p->type == error) {
+        switch (symbol(state)) {
+            case pre: p->type = preproc; break;
+            case lco: p->type = line_comment; break;
+            case bco: p->type = block_comment; break;
+            default: break;
+        }
+    }
+    state->phrase.last = state->input;
+}
+
+// s01
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s03,s14,s14,s14,s14,s14,s02,s19}, // s01: start
+void f_start(State* state) {
+    switch (symbol(state)) {
+        case tok: {
+                Element* e = state->input;
+                String s = make_string2(e->begin, e->end - e->begin);
+                if (cstring_equal(s, "struct") || cstring_equal(s, "union") 
+                        || cstring_equal(s, "enum")) {
+                    f_struct_union_enum(next(state));
+                } else if (cstring_equal(s, "typedef")) {
+                    f_typedef(next(state));
+                } else {
+                    f_tok(next(state)); 
+                }
+            }
+            break;
+        case pub: f_pub(next(state)); break;
+        case pre: f_pre(next(state)); break;
+        default: f_err(state); break;
+    }
+}
+
+// s02
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s03,s14,s14,s14,s14,s14,s02,s19}, // s02: pub
+void f_pub(State* state) {
+    state->phrase.is_public = true;
+    switch (symbol(state)) {
+        case tok: {
+                Element* e = state->input;
+                String s = make_string2(e->begin, e->end - e->begin);
+                if (cstring_equal(s, "struct") || cstring_equal(s, "union") 
+                        || cstring_equal(s, "enum")) {
+                    f_struct_union_enum(next(state));
+                } else if (cstring_equal(s, "typedef")) {
+                    f_typedef(next(state));
+                } else {
+                    f_tok(next(state)); 
+                }
+            }
+            break;
+        case pre: f_pre(next(state)); break;
+        default: f_err(state); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s03,s07,s04,s14,s10,s08,s14,s14}, // s03: pub? tok+
+void f_tok(State* state) {
+    Element* e = state->input;
+    switch (symbol(state)) {
+        case tok: f_tok(next(state)); break;
+        case sem: f_tok_sem(state); break;
+        case bra: 
+            if (is_paren(e)) {
+                f_tok_paren(next(state));
+            } else if (is_bracket(e)) {
+                f_tok_bracket(next(state));
+            } else {
+                f_err(state);
+            }
+            break;
+        case asg: f_tok_asg(next(state)); break;
+        default: f_err(state); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s14,s05,s14,s06,s14,s14,s14,s14}, // s04: pub? tok+ b()
+void f_tok_paren(State* state) {
+    Element* e = state->input;
+    switch (symbol(state)) {
+        case sem: f_tok_paren_sem(state); break;
+        case bra: 
+            if (is_curly(e)) {
+                f_tok_paren_curly(state);
+            } else {
+                f_err(state);
+            }
+            break;
+        default: f_err(state); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s05,s05,s05,s05,s05,s05,s05,s05}, // s05: pub? tok+ b() sem -> fun_dec
+void f_tok_paren_sem(State* state) {
+    state->phrase.type = fun_dec;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s06,s06,s06,s06,s06,s06,s06,s06}, // s06: pub? tok+ b() b{} -> fun_def
+void f_tok_paren_curly(State* state) {
+    state->phrase.type = fun_def;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s09,s09,s09,s09,s09,s09,s09,s09}, // s07: pub? tok+ sem -> var_dec
+void f_tok_sem(State* state) {
+    state->phrase.type = var_dec;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s08,s09,s08,s08,s08,s14,s08,s14}, // s08: pub? tok+ asg
+void f_tok_asg(State* state) {
+    switch (symbol(state)) {
+        case sem: f_tok_asg_sem(state); break;
+        case asg: case pre: f_err(state); break;
+        default: f_tok_asg(next(state)); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s09,s09,s09,s09,s09,s09,s09,s09}, // s09: pub? tok+ asg !sem* sem -> var_def
+void f_tok_asg_sem(State* state) {
+    state->phrase.type = var_def;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s14,s11,s14,s14,s10,s12,s14,s14}, // s10: pub? tok+ b[]+
+void f_tok_bracket(State* state) {
+    switch (symbol(state)) {
+        case sem: f_tok_bracket_sem(state); break;
+        case bra: 
+            if (is_bracket(state->input)) {
+                f_tok_bracket(next(state));
+            } else {
+                f_err(state);
+            }
+            break;
+        case asg: f_tok_bracket_asg(next(state)); break;
+        default: f_err(state); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s11,s11,s11,s11,s11,s11,s11,s11}, // s11: pub? tok+ b[]+ sem -> arr_dec
+void f_tok_bracket_sem(State* state) {
+    state->phrase.type = arr_dec;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s12,s13,s12,s12,s12,s14,s14,s14}, // s12: pub? tok+ b[]+ asg
+void f_tok_bracket_asg(State* state) {
+    switch (symbol(state)) {
+        case sem: f_tok_bracket_asg_sem(state); break;
+        case asg: case pub: case pre: f_err(state); break;
+        default: f_tok_bracket_asg(state); break;
+    }
+}
+
+//{s13,s13,s13,s13,s13,s13,s13,s13}, // s13: pub? tok+ b[]+ asg !sem* sem -> arr_def
+void f_tok_bracket_asg_sem(State* state) {
+    state->phrase.type = arr_def;
+}
+
+//{s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
+void f_err(State* state) {
+    state->phrase.type = arr_def;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s20,s14,s14,s21,s14,s14,s14,s14}, // s15: pub? tok("struct"|"union")
+void f_struct_union_enum(State* state) {
+    switch (symbol(state)) {
+        case tok: f_struct_union_enum_tok(next(state)); break;
+        case sem: f_struct_union_enum_sem(state); break;
+        default: f_err(state); break;
+    }
+}
+
+//{s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_or_union_def
+void f_struct_union_enum_sem(State* state) {
+    state->phrase.type = struct_or_union_def;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s17,s18,s17,s17,s17,s17,s17,s14}, // s17: pub? tok("typedef")
+void f_typedef(State* state) {
+    switch (symbol(state)) {
+        case sem: f_typedef_sem(state); break;
+        case pre: f_err(state); break;
+        default: f_typedef(next(state)); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s18,s18,s18,s18,s18,s18,s18,s18}, // s18: type_def
+void f_typedef_sem(State* state) {
+    state->phrase.type = type_def;
+}
+
+//{s19,s19,s19,s19,s19,s19,s19,s19}, // s19: pub? pre
+void f_pre(State* state) {
+    state->phrase.type = preproc;
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s14,s16,s14,s21,s14,s14,s14,s14}, // s20: pub? tok("struct"|"union") tok
+void f_struct_union_enum_tok(State* state) {
+    switch (symbol(state)) {
+        case sem: f_struct_union_enum_sem(state); break;
+        case bra: 
+            if (is_curly(state->input)) {
+                f_struct_union_enum_curly(next(state));
+            } else {
+                f_err(state);
+            }
+            break;
+        default: f_err(state); break;
+    }
+}
+
+// tok,sem,b(),b{},b[],asg,pub,pre
+//{s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
+void f_struct_union_enum_curly(State* state) {
+    switch (symbol(state)) {
+        case sem: f_struct_union_enum_sem(state); break;
+        default: f_err(state); break;
+    }
+}
+
+Phrase get_phrase(Element* list) {
+    require_not_null(list);
+    State state = (State){list, (Phrase){unknown, false, list, list}};
+    // skip initial whitespace
+    state.input = skip_whi_lbr_ind(state.input);
+    f_start(&state); 
+    Phrase* p = &state.phrase;
+    if (p->type == error) {
+        switch (symbol(&state)) {
+            case lco: p->type = line_comment; break;
+            case bco: p->type = block_comment; break;
+            default: break;
+        }
+    }
+    state.phrase.last = state.input;
+    return state.phrase;
+}
+
+
+
 /*
 Returns the next phrase starting at the given element.
 */
-Phrase get_phrase(Element* list) {
+Phrase get_phrase0(Element* list) {
     require_not_null(list);
     Element* e = list;
     if (e->type == pre) return (Phrase){preproc, false, e, e};
