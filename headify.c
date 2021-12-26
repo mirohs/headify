@@ -56,21 +56,20 @@ typedef struct Point Point;
 */
 
 static const char* ElementTypeName[] = { 
-    "ind", "tok", "whi", "str", "stx", 
-    "ste", "chr", "chx", "che", "pre", 
-    "lco", "bco", "bce", "bci", "bcf", 
-    "sem", "lbr", "bra", "bre", "asg", 
-    "pub", "ElementTypeCount"
+    "err", "whi", "tok", "pre", "lco", "bco", "sem", 
+    "lbr", "par", "bra", "cur", "clo", "asg", "pub", 
+    "eos", "ElementTypeCount"
 };
 
 // Generate the ElementList type and its associated functions. See util.h.
 generate_list(ElementList, Element, elements_, );
 
 /*
-Creates a new element of the given type extending from begin (inclusive) to end
-(exclusive). The next pointer is used to chain elements in a linked list.
+Creates a new dynamically allocated element of the given type extending from
+begin (inclusive) to end (exclusive). The next pointer is used to chain elements
+in a linked list.
 */
-Element* new_element(ElementType type, char* begin, char* end, Element* next) {
+Element* new_element(ElementType type, char* begin, char* end) {
 #if 0
     static char* first_begin = NULL;
     if (first_begin == NULL) first_begin = begin;
@@ -89,8 +88,21 @@ Element* new_element(ElementType type, char* begin, char* end, Element* next) {
     e->type = type;
     e->begin = begin;
     e->end = end;
-    e->next = next;
+    e->next = NULL;
     return e;
+}
+
+/*
+Returns a new element on the stack of the given type extending from begin
+(inclusive) to end (exclusive). The next pointer is used to chain elements in a
+linked list.
+*/
+Element make_element(ElementType type, char* begin, char* end) {
+    require("valid type", 0 <= type && type < ElementTypeCount);
+    require_not_null(begin);
+    require_not_null(end);
+    require("end not before begin", begin <= end);
+    return (Element){type, begin, end, NULL};
 }
 
 /*
@@ -122,115 +134,333 @@ bool braces_match(char bo, char bc) {
 }
 
 /*
-State transition matrix for elements. Each row represents a state. Each colum
-represents an input. The input either consists of a single character or two
-subsequent characters.
+Counts the number of line breaks between s (inclusive) and t (exclusive).
 */
-const ElementType states[ElementTypeCount][15] = { // rows: states, columns: inputs
-    //"   '   \   #   ;   \n  //  /*  */  ws  bo  bc   =   *  other
-    //0   1   2   3   4   5   6   7   8   9   10  11  12  13  14
-    {str,chr,ind,pre,sem,lbr,lco,bci,tok,ind,bra,bra,asg,pub,tok}, // ind indent
-    {str,chr,tok,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // tok token
-    {str,chr,tok,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // whi whitespace
-    {ste,str,stx,str,str,str,str,str,str,str,str,str,str,str,str}, // str string
-    {str,str,str,str,str,str,str,str,str,str,str,str,str,str,str}, // stx string_escape
-    {str,chr,tok,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // ste string_end
-    {chr,che,chx,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr}, // chr char
-    {chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr,chr}, // chx char_escape
-    {str,chr,tok,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // che char_end
-    {pre,pre,pre,pre,pre,lbr,pre,pre,pre,pre,pre,pre,pre,pre,pre}, // pre preproc
-    {lco,lco,lco,lco,lco,lbr,lco,lco,lco,lco,lco,lco,lco,lco,lco}, // lco line_comment
-    {bco,bco,bco,bco,bco,bco,bco,bco,bce,bco,bco,bco,bco,bco,bco}, // bco block_comment
-    {str,chr,bce,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // bce block_comment_end
-    {bci,bci,bci,bci,bci,bci,bci,bci,bcf,bci,bci,bci,bci,bci,bci}, // bci block_comment_in_ind
-    {str,chr,bcf,pre,sem,lbr,lco,bci,tok,ind,bra,bra,asg,pub,tok}, // bcf block_comment_in_ind_end
-    {str,chr,sem,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // sem semicolon
-    {str,chr,lbr,pre,sem,lbr,lco,bci,pub,ind,bra,bra,asg,pub,tok}, // lbr line_break
-    {bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra,bra}, // bra braces
-    {str,chr,bre,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // bre braces_end
-    {str,chr,asg,tok,sem,lbr,lco,bco,tok,whi,bra,bra,asg,tok,tok}, // asg assign
-    {str,chr,pub,pre,sem,lbr,lco,bco,tok,ind,bra,bra,asg,pub,tok}, // pub public
-};
+int count_lines(char* s, char* t) {
+    require_not_null(s);
+    require_not_null(t);
+    int n = 0;
+    for (; s < t; s++) {
+        if (*s == '\n') n++;
+    }
+    return n;
+}
+
+// Is the scanner in the indentation region at the beginning of a line?
+static bool indent = false;
+
+// Contains the error message in case of an error.
+static char* error_message = NULL;
+
+// Contains the error position in case of an error.
+static char* error_pos = NULL;
 
 /*
-Computes the next state given the current state and two subsequent characters
-from the input. The state variable encodes the element type in the lower byte.
-For the braces state, it encodes the brace level to be able to parse nested
-braces.
+Get next element from source code string.
 */
-int next_state(int state, char c, char d) {
-    assert("valid ElementTypeCount", sizeof(states) / sizeof(states[0]) == ElementTypeCount);
-    int count = state >> 8;
-    state &= 0xff;
-    if (DEBUG) printf("next_state beg: %s, %d, %c%c\n", 
-            ElementTypeName[state], count, c, d);
-    require("valid state", 0 <= state && state < ElementTypeCount);
-    assert("valid count for state", (state == bra && count > 0) || (state != bra && count == 0));
-    int input = 0;
+Element scan_next(char* s) {
+    char* t = s + 1;
+    char c = *s;
+    char d = *t;
+    bool escape = false;
     switch (c) {
-        case '"': input = 0; break;
-        case '\'': input = 1; break;
-        case '\\': input = 2; break;
-        case '#': input = 3; break;
-        case ';': input = 4; break;
-        case '\n': input = 5; break;
-        case '/': 
-            switch (d) {
-                case '/': input = 6; break;
-                case '*': input = 7; break;
-                default: input = 14; break;
+    case '\0': return make_element(eos, s, s);
+    case '\n': indent = true; return make_element(lbr, s, t);
+    case '*': return make_element(indent ? pub : tok, s, t);
+    case ';': indent = false; return make_element(sem, s, t);
+    case '=': indent = false; return make_element(asg, s, t);
+    case '#': 
+        if (!indent) return make_element(tok, s, t);
+        indent = false;
+        while (*t != '\0') {
+            if (*t == '\\' && *(t + 1) == '\n') {
+                t += 2;
+                continue;
             }
-            break;
-        case '*': if (d == '/') input = 8; else input = 13; break;
-        case ' ': case '\t': input = 9; break;
-        case '(': case '[': case '{': input = 10; break;
-        case ')': case ']': case '}': input = 11; break;
-        case '=': input = 12; break;
-        default: input = 14; break;
-    }
-    assert("valid input", 0 <= input && input <= 14);
-    state = states[state][input];
-    assert("valid state", 0 <= state && state < ElementTypeCount);
-    if (state == bra) {
-        if (input == 10) {
-            count++;
-        } else if (input == 11) {
-            count--;
-            if (count == 0) {
-                state = bre;
+            if (*t == '\n') {
+                break;
+            }
+            t++;
+        }
+        return make_element(pre, s, t);
+    case ' ': case '\t': 
+        while (*t != '\0') {
+            if (*t == '\\' && *(t + 1) == '\n') {
+                t += 2;
+                continue;
+            }
+            if (*t != ' ' && *t != '\t') {
+                break;
+            }
+            t++;
+        }
+        return make_element(whi, s, t);
+    case '"': 
+        indent = false;
+        escape = false;
+        while (*t != '\0') {
+            if (!escape && *t == '"') {
+                // treat string literals as tokens
+                return make_element(tok, s, t + 1);
+            }
+            if (*t == '\\') {
+                escape = !escape;
+            } else {
+                escape = false;
+            }
+            t++;
+        }
+        error_message = "unterminated string literal";
+        error_pos = s;
+        return make_element(err, s, t);
+    case '\'': 
+        indent = false;
+         escape = false;
+        while (*t != '\0') {
+            if (!escape && *t == '\'') {
+                // treat character literals as tokens
+                return make_element(tok, s, t + 1);
+            }
+            if (*t == '\\') {
+                escape = !escape;
+            } else {
+                escape = false;
+            }
+            t++;
+        }
+        error_message = "unterminated character literal";
+        error_pos = s;
+        return make_element(err, s, t);
+    case '/':
+        if (d == '/') {
+            indent = false;
+            t++;
+            while (*t != '\0') {
+                /* no nulti-line // comments
+                if (*t == '\\' && *(t + 1) == '\n') {
+                    t += 2;
+                    continue;
+                }
+                */
+                if (*t == '\n') {
+                    break;
+                }
+                t++;
+            }
+            return make_element(lco, s, t);
+        } else if (d == '*') {
+            t++;
+            while (*t != '\0') {
+                if (*t == '*' && *(t + 1) == '/') {
+                    return make_element(bco, s, t + 2);
+                }
+                t++;
+            }
+            error_message = "unterminated block comment";
+            error_pos = s;
+            return make_element(err, s, t);
+        } else {
+            return make_element(tok, s, t);
+        }
+    case '(': case '{': case '[':
+        indent = false;
+        while (*t != '\0') {
+            Element e = scan_next(t);
+            t = e.end;
+            if (e.type == eos) break;
+            if (e.type == err) return e;
+            if (e.type == clo) {
+                if (braces_match(c, *e.begin)) {
+                    if (c == '(') return make_element(par, s, t);
+                    if (c == '{') return make_element(cur, s, t);
+                    /* [ */ return make_element(bra, s, t);
+                } else {
+                    error_message = "braces do not match";
+                    error_pos = e.begin;
+                    return make_element(err, s, t);
+                }
             }
         }
-        state |= count << 8;
+        error_message = "unterminated braces";
+        error_pos = s;
+        return make_element(err, s, t);
+    case ')': case '}': case ']':
+        indent = false;
+        return make_element(clo, s, t);
+    default:
+        assert("not eos", c != '\0');
+        indent = false;
+        while (*t != '\0') {
+            switch (*t) {
+                case ' ': case '\t': case '\n': 
+                case ';': case '=': 
+                case '/': case '\\': 
+                case '"': case '\'': 
+                case '(': case '{': case '[': 
+                case ')': case '}': case ']':
+                    return make_element(tok, s, t);
+            }
+            t++;
+        }
+        return make_element(tok, s, t);
     }
-    if (DEBUG) printf("next_state ret: %s, %d\n", 
-            ElementTypeName[state & 0xff], state >> 8);
-    return state;
 }
 
 /*
-Test functino for next_state.
+Test function for an element.
 */
-void next_state_test(void) {
-    test_equal_i(next_state(ind, '"', 'y'), str);
-    test_equal_i(next_state(ind, '\'', 'y'), chr);
-    test_equal_i(next_state(ind, '\\', 'y'), ind);
-    test_equal_i(next_state(ind, '/', '/'), lco);
-    test_equal_i(next_state(ind, '/', '*'), bci);
-    test_equal_i(next_state(ind, '*', '/'), tok);
-    test_equal_i(next_state(ind, 'x', 'y'), tok);
-    test_equal_i(next_state(str, '"', 'y'), ste);
-    test_equal_i(next_state(str, '\'', 'y'), str);
-    test_equal_i(next_state(chr, '\'', 'y'), che);
-    test_equal_i(next_state(str, '\\', 'y'), stx);
-    test_equal_i(next_state(str, '/', '/'), str);
-    test_equal_i(next_state(str, '/', '*'), str);
-    test_equal_i(next_state(str, '*', '/'), str);
-    test_equal_i(next_state(str, 'x', 'y'), str);
-    test_equal_i(next_state(ind, '(', ' '), (1 << 8) | bra);
-    test_equal_i(next_state((1 << 8) | bra, '(', ' '), (2 << 8) | bra);
-    test_equal_i(next_state((2 << 8) | bra, ')', ' '), (1 << 8) | bra);
-    test_equal_i(next_state((1 << 8) | bra, ')', ' '), bre);
-    test_equal_i(next_state(bre, ' ', '/'), whi);
+#define test_equal_element(actual, type, content, follow) \
+    base_test_equal_element(__FILE__, __LINE__, actual, type, content, follow)
+bool base_test_equal_element(const char* file, int line, Element e, ElementType type, 
+        char* content, char* follow) {
+    bool ok1 = base_test_equal_s(file, line, make_string2(e.begin, e.end - e.begin), content);
+    bool ok2 = base_test_equal_s(file, line, make_string2(e.end, strlen(e.end)), follow);
+    bool ok3 = base_test_equal_i(file, line, e.type, type);
+    if (!ok3) printf("\t\ttypes: actual = %s, expected = %s\n", 
+            ElementTypeName[e.type], ElementTypeName[type]);
+    return ok1 && ok2 && ok3;
+}
+
+/*
+Test scan_next.
+*/
+void scan_next_test(void) {
+    Element e;
+    
+    e = scan_next("");
+    test_equal_element(e, eos, "", "");
+    
+    e = scan_next("\nabc");
+    test_equal_element(e, lbr, "\n", "abc");
+    
+    indent = true;
+    e = scan_next("*abc");
+    test_equal_element(e, pub, "*", "abc");
+    
+    indent = false;
+    e = scan_next("*abc");
+    test_equal_element(e, tok, "*", "abc");
+    
+    e = scan_next("abc*");
+    test_equal_element(e, tok, "abc*", "");
+    
+    e = scan_next(";abc");
+    test_equal_element(e, sem, ";", "abc");
+
+    e = scan_next("=abc");
+    test_equal_element(e, asg, "=", "abc");
+
+    indent = true;
+    e = scan_next("#abc");
+    test_equal_element(e, pre, "#abc", "");
+
+    indent = false;
+    e = scan_next("#abc");
+    test_equal_element(e, tok, "#", "abc");
+
+    indent = true;
+    e = scan_next("#a\nb");
+    test_equal_element(e, pre, "#a", "\nb");
+
+    indent = false;
+    e = scan_next("#a\nb");
+    test_equal_element(e, tok, "#", "a\nb");
+    
+    e = scan_next(" \t abc def");
+    test_equal_element(e, whi, " \t ", "abc def");
+    
+    e = scan_next("\"\"x");
+    test_equal_element(e, tok, "\"\"", "x");
+    
+    e = scan_next("\"a\"x");
+    test_equal_element(e, tok, "\"a\"", "x");
+    
+    e = scan_next("\"\\\\\"x");
+    test_equal_element(e, tok, "\"\\\\\"", "x");
+    
+    e = scan_next("''x");
+    test_equal_element(e, tok, "''", "x");
+    
+    e = scan_next("'a'x");
+    test_equal_element(e, tok, "'a'", "x");
+    
+    e = scan_next("'\\\\'x");
+    test_equal_element(e, tok, "'\\\\'", "x");
+
+    e = scan_next("//x");
+    test_equal_element(e, lco, "//x", "");
+    
+    e = scan_next("//x\na");
+    test_equal_element(e, lco, "//x", "\na");
+    
+    e = scan_next("/**/x");
+    test_equal_element(e, bco, "/**/", "x");
+    
+    e = scan_next("/*abc*/x");
+    test_equal_element(e, bco, "/*abc*/", "x");
+    
+    e = scan_next("abc def");
+    test_equal_element(e, tok, "abc", " def");
+    
+    e = scan_next("(abc)x");
+    test_equal_element(e, par, "(abc)", "x");
+
+    e = scan_next("(x[abc]y)z");
+    test_equal_element(e, par, "(x[abc]y)", "z");
+
+    e = scan_next("{x[a{ b }c]y}z");
+    test_equal_element(e, cur, "{x[a{ b }c]y}", "z");
+
+    e = scan_next("[x[a{ b }c]y]z");
+    test_equal_element(e, bra, "[x[a{ b }c]y]", "z");
+
+    e = scan_next("([abc)x");
+    test_equal_element(e, err, "[abc)", "x");
+    printf("error = %s\n", error_message);
+
+    e = scan_next("/*abc");
+    test_equal_element(e, err, "/*abc", "");
+    printf("error = %s\n", error_message);
+
+    e = scan_next("\"abc");
+    test_equal_element(e, err, "\"abc", "");
+    printf("error = %s\n", error_message);
+
+    e = scan_next("'abc");
+    test_equal_element(e, err, "'abc", "");
+    printf("error = %s\n", error_message);
+
+    e = scan_next("abc def");
+    test_equal_element(e, tok, "abc", " def");
+
+    e = scan_next("abc\tdef");
+    test_equal_element(e, tok, "abc", "\tdef");
+
+    e = scan_next("abc\ndef");
+    test_equal_element(e, tok, "abc", "\ndef");
+
+    e = scan_next("abc(def");
+    test_equal_element(e, tok, "abc", "(def");
+
+    e = scan_next("abc{def");
+    test_equal_element(e, tok, "abc", "{def");
+
+    e = scan_next("abc[def");
+    test_equal_element(e, tok, "abc", "[def");
+
+    e = scan_next("abc;def");
+    test_equal_element(e, tok, "abc", ";def");
+
+    e = scan_next("abc=def");
+    test_equal_element(e, tok, "abc", "=def");
+
+    e = scan_next("abc/def");
+    test_equal_element(e, tok, "abc", "/def");
+
+    e = scan_next("/def");
+    test_equal_element(e, tok, "/", "def");
+
+    indent = true;
 }
 
 /*
@@ -238,87 +468,21 @@ Parses the source code string into a list of elements.
 */
 ElementList get_elements(char* filename, String source_code) {
     require_not_null(filename);
-    int state = ind, count = 0, prev_state = ind;
-    int line_number = 1;
     ElementList elements = {NULL, NULL};
-    char* begin = source_code.s;
-    char* end = NULL;
-    for (int i = 0; i < source_code.len; i++) {
-        char c = source_code.s[i];
-        char d = source_code.s[i + 1];
-        // skip line continuation
-        if (c == '\\' && d == '\n') {
-            i++; // continue after newline
-            continue;
+    Element e = scan_next(source_code.s);
+    while (e.type != eos) {
+        if (e.type == err) {
+            int line = count_lines(source_code.s, error_pos) + 1;
+            printf("%s:%d: %s\n", filename, line, error_message);
+            exit(EXIT_FAILURE);
         }
-        prev_state = state;
-        state = next_state(state | (count << 8), c, d);
-        count = state >> 8;
-        state = state & 0xff;
-        if (DEBUG) printf("%4d: %c%c %s %s %d\n", i, c, d, ElementTypeName[prev_state], 
-                ElementTypeName[state], count);
-        if (c == '\n') line_number++;
-
-        // some elements are only created when the state changes
-        if (prev_state != state) {
-            end = source_code.s + i;
-            // create an element if it is complete now
-            if (end > begin) {
-                if (prev_state == ind || prev_state == tok || prev_state == whi 
-                        || prev_state == pre || prev_state == lco) {
-                    //if (tok == "struct")...
-                    elements_append(&elements, new_element(prev_state, begin, end, NULL));
-                    begin = end;
-                }
-            }
-
-            if (state == str && prev_state != stx) {
-                begin = source_code.s + i;
-            } else if (state == ste) {
-                end = source_code.s + i + 1;
-                // treat string literals as token elements
-                elements_append(&elements, new_element(tok, begin, end, NULL));
-                begin = end;
-            } else if (state == chr && prev_state != chx) {
-                begin = source_code.s + i;
-            } else if (state == che) {
-                end = source_code.s + i + 1;
-                // treat character literals as token elements
-                elements_append(&elements, new_element(tok, begin, end, NULL));
-                begin = end;
-            } else if (state == pre || state == lco || state == bco || state == bci) {
-                begin = source_code.s + i;
-            } else if (state == bce || state == bcf) {
-                end = source_code.s + i + 2;
-                elements_append(&elements, new_element(bco, begin, end, NULL));
-                i++;
-                begin = end;
-            } else if (state == bra && count == 1) {
-                begin = source_code.s + i;
-            } else if (state == bre) {
-                end = source_code.s + i + 1;
-                char bo = *begin;
-                char bc = *(end - 1);
-                if (!braces_match(bo, bc)) {
-                    fprintf(stderr, "%s:%d: Opening and closing brace do not match.\n", 
-                            filename, line_number);
-                    exit(EXIT_FAILURE);
-                }
-                elements_append(&elements, new_element(bra, begin, end, NULL));
-                begin = end;
-            }
-        } // if (prev_state != state)
-
-        // some elements are created on every occurrence of the state
-        if (state == sem || state == lbr || state == asg || state == pub) {
-            end = begin + 1;
-            elements_append(&elements, new_element(state, begin, end, NULL));
-            begin = end;
-        }
-    } // for all chars of source_code
+        elements_append(&elements, new_element(e.type, e.begin, e.end));
+        e = scan_next(e.end);
+    }
     return elements;
 }
 
+#if 0
 // Checks if e is a brace.
 bool is_bra(Element* e) {
     return e != NULL && e->type == bra;
@@ -844,19 +1008,6 @@ void xappend_string_until(String* str, Element* first, bool stop(Element*)) {
 }
 
 /*
-Counts the number of line breaks between s (inclusive) and t (exclusive).
-*/
-int count_lines(char* s, char* t) {
-    require_not_null(s);
-    require_not_null(t);
-    int n = 0;
-    for (; s < t; s++) {
-        if (*s == '\n') n++;
-    }
-    return n;
-}
-
-/*
 Creates header file contents for the given list of elements.
 */
 String create_header(/*in*/String basename, /*in*/Element* list) {
@@ -1040,6 +1191,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
     }
     return impl;
 }
+#endif
 
 int main(int argc, char* argv[]) {
     // split_test();
@@ -1052,6 +1204,7 @@ int main(int argc, char* argv[]) {
     // index_of_test();
     // append_test();
     // xappend_test();
+    // scan_next_test();
     // exit(0);
 
     if (argc != 2) {
@@ -1079,7 +1232,9 @@ int main(int argc, char* argv[]) {
 
     String source_code = read_file(filename.s);
     ElementList elements = get_elements(filename.s, source_code);
-    if (DEBUG) print_elements(&elements);
+    //if (DEBUG) 
+    print_elements(&elements);
+    exit(EXIT_FAILURE);
 
 #if 0
     Phrase phrase = get_phrase(elements.first);
@@ -1100,6 +1255,7 @@ int main(int argc, char* argv[]) {
         e = e->next;
     }
 #endif
+#if 0
     if (DEBUG) print_phrases(elements.first);
 
     String head = create_header(basename, elements.first);
@@ -1129,7 +1285,7 @@ int main(int argc, char* argv[]) {
     write_file(implname.s, impl);
     free(implname.s);
     free(impl.s);
-
+#endif
     elements_free(&elements);
     free(source_code.s);
     return 0;

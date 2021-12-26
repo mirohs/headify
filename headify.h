@@ -30,12 +30,31 @@ arr_def, struct_or_union_def, type_def, preproc, line_comment, block_comment
 */
 typedef enum ElementType ElementType;
 enum ElementType { 
-    ind, tok, whi, str, stx, 
-    ste, chr, chx, che, pre, 
-    lco, bco, bce, bci, bcf, 
-    sem, lbr, bra, bre, asg, 
-    pub, ElementTypeCount
+    err, whi, tok, pre, lco, bco, sem, 
+    lbr, par, bra, cur, clo, asg, pub, 
+    eos, ElementTypeCount
 };
+
+/*
+pub = /lbr /{bco} "*".             lbr and bco do not belong to pub
+tok = id_char1 {id_char}.
+id_char1 = letter | "_".
+id_char = id_char1 | digit.
+whi = whichar {whi_char}.
+whi_char = " " | "\t".
+str = """ {str_char} """.
+str_char = char | escaped_char.
+chr = "'" chr_char "'".
+chr_char = char | escaped_char.
+pre = "#" {!lbr} /lbr.             lbr does not belong to pre
+lbr = "\n".
+lco = "//" {!lbr} /lbr.
+bco = "/+" {char} "+/".
+sem = ";".
+par = "(" exp ")".                 count number of enclosed braces
+bra = "[" exp "]".
+cur = "{" exp "}".
+*/
 
 typedef struct Element Element;
 struct Element {
@@ -131,5 +150,18 @@ void f_typedef(State* state);
 void f_typedef_sem(State* state); // typedef_def
 void f_pre(State* state); // preproc
 void f_err(State* state); // error
+
+/*
+source_code = {[pub] phrase}
+phrase = fun_dec | fun_def | var_dec | var_def | arr_dec | arr_def 
+       | struct_union_enum_def | typedef_def | preproc | error
+lbr = "\n"
+pub = lbr "*"
+ind = {" " | "\t"}   after lbr
+whi = {" " | "\t"}
+var_dec = [pub] tok {tok} sem
+var_def = [pub] tok {tok} asg {!sem} sem
+tok = (letter | "_") {letter | digit | "_"}
+*/
 
 #endif // headify_h_INCLUDED
