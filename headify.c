@@ -10,51 +10,6 @@
 
 const int DEBUG = false;
 
-/*
-Examples:
-
-#include "util.h"
-- hash, preproc_begin, preproc_end, preproc, line_break
-- hash, preproc, line_break
-
-const int DEBUG = false;
-- token+, assign, token+, semicolon, line_break
-
-int i;
-- token+, semicolon, line_break
-
-int indentation(String s) {}
-- paren_open, paren_close, parens, brace_open, brace_close, braces, line_break
-- token+, parens, braces, line_break
-
-*int indentation(String s) {}
-- public, token+, parens, braces, line_break
-  (public only after newline and whitespace)
-
-int indentation(String s);
-- token+, parens, semicolon, line_break
-
-int a[9][9] = {
-    { 8, 8, 8, 8, 8, 8, 8, 0, 8 }, 
-    ...
-};
-- token+, brackets+, assign, braces, semicolon, line_break
-
-typedef struct {
-    char* owner;
-    int balance; }
-Account;
-- token+, braces, line_break, token, semicolon
-
-struct Point {
-    int x;
-    int y; };
-- token+, braces, semicolon
-
-typedef struct Point Point;
-- token+, semicolon
-*/
-
 static const char* ElementTypeName[] = { 
     "err", "whi", "tok", "pre", "lco", "bco", "sem", 
     "lbr", "par", "bra", "cur", "clo", "asg", "pub", 
@@ -496,6 +451,7 @@ bool is_curly(Element* e) {
     return e != NULL && e->type == cur;
 }
 
+// Is the element a struct or union or enum token?
 bool is_struct_union_enum(Element* e) {
     String s = make_string2(e->begin, e->end - e->begin);
     return cstring_equal(s, "struct") 
@@ -503,14 +459,15 @@ bool is_struct_union_enum(Element* e) {
         || cstring_equal(s, "enum");
 }
 
+// Is the element a typedef token?
 bool is_typedef(Element* e) {
     String s = make_string2(e->begin, e->end - e->begin);
     return cstring_equal(s, "typedef");
 }
 
 /*
-Returns the next element that is not one of {whi, lbr, ind}; or NULL if there
-is no such element.
+Returns the next element that is neither whi nor lbr; or NULL if there is no
+such element.
 */
 Element* skip_whi_lbr(Element* e) {
     for (; e != NULL; e = e->next) {
@@ -522,8 +479,8 @@ Element* skip_whi_lbr(Element* e) {
 }
 
 /*
-Returns the next element that is not one of {whi, lbr, ind, sem}; or NULL if
-there is no such element.
+Returns the next element that is neither whi nor lbr nor sem; or NULL if there
+is no such element.
 */
 Element* skip_whi_lbr_sem(Element* e) {
     for (; e != NULL; e = e->next) {
@@ -536,12 +493,12 @@ Element* skip_whi_lbr_sem(Element* e) {
 
 static const char* PhraseTypeNames[] = {
     "unknown", "error", "fun_dec", "fun_def", "var_dec", "var_def", "arr_dec", "arr_def", 
-    "struct_or_union_def", "type_def", "preproc", "line_comment", "block_comment"
+    "struct_union_enum_def", "type_def", "preproc", "line_comment", "block_comment"
 };
 
 /*
 Prints the phrase in the format [*PhraseType:<phrase contents>].followed by a
-line break.
+line break. A '*' indicates a public phrase.
 */
 void print_phrase(Phrase* phrase) {
     require_not_null(phrase);
@@ -576,7 +533,7 @@ const PhraseState phrases[PhraseStateCount][8] = {
   {s13,s13,s13,s13,s13,s13,s13,s13}, // s13: pub? tok+ b[]+ asg !sem* sem -> arr_def
   {s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
   {s20,s14,s14,s21,s14,s14,s14,s14}, // s15: pub? tok("struct"|"union")
-  {s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_or_union_def
+  {s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_union_enum_def
   {s17,s18,s17,s17,s17,s17,s17,s14}, // s17: pub? tok("typedef")
   {s18,s18,s18,s18,s18,s18,s18,s18}, // s18: type_def
   {s19,s19,s19,s19,s19,s19,s19,s19}, // s19: pub? pre
@@ -602,26 +559,6 @@ ElementType symbol(State* s) {
     return e->type;
 }
 
-void f_start000(State* state) {
-    Element* e = state->input;
-    // skip initial whitespace
-    state->input = skip_whi_lbr(state->input);
-    f_start(state); 
-    Phrase* p = &state->phrase;
-    if (p->type == error) {
-        switch (symbol(state)) {
-            case pre: p->type = preproc; break;
-            case lco: p->type = line_comment; break;
-            case bco: p->type = block_comment; break;
-            default: break;
-        }
-    }
-    state->phrase.last = state->input;
-}
-
-// s01
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s03,s14,s14,s14,s14,s14,s02,s19}, // s01: start
 void f_start(State* state) {
     switch (symbol(state)) {
         case tok: {
@@ -641,9 +578,6 @@ void f_start(State* state) {
     }
 }
 
-// s02
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s03,s14,s14,s14,s14,s14,s02,s19}, // s02: pub
 void f_pub(State* state) {
     state->phrase.is_public = true;
     switch (symbol(state)) {
@@ -663,8 +597,6 @@ void f_pub(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s03,s07,s04,s14,s10,s08,s14,s14}, // s03: pub? tok+
 void f_tok(State* state) {
     switch (symbol(state)) {
         case tok: f_tok(next(state)); break;
@@ -676,8 +608,6 @@ void f_tok(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s14,s05,s14,s06,s14,s14,s14,s14}, // s04: pub? tok+ b()
 void f_tok_paren(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_paren_sem(state); break;
@@ -686,26 +616,18 @@ void f_tok_paren(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s05,s05,s05,s05,s05,s05,s05,s05}, // s05: pub? tok+ b() sem -> fun_dec
 void f_tok_paren_sem(State* state) {
     state->phrase.type = fun_dec;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s06,s06,s06,s06,s06,s06,s06,s06}, // s06: pub? tok+ b() b{} -> fun_def
 void f_tok_paren_curly(State* state) {
     state->phrase.type = fun_def;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s09,s09,s09,s09,s09,s09,s09,s09}, // s07: pub? tok+ sem -> var_dec
 void f_tok_sem(State* state) {
     state->phrase.type = var_dec;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s08,s09,s08,s08,s08,s14,s08,s14}, // s08: pub? tok+ asg
 void f_tok_asg(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_asg_sem(state); break;
@@ -714,14 +636,10 @@ void f_tok_asg(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s09,s09,s09,s09,s09,s09,s09,s09}, // s09: pub? tok+ asg !sem* sem -> var_def
 void f_tok_asg_sem(State* state) {
     state->phrase.type = var_def;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s14,s11,s14,s14,s10,s12,s14,s14}, // s10: pub? tok+ b[]+
 void f_tok_bracket(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_bracket_sem(state); break;
@@ -731,14 +649,10 @@ void f_tok_bracket(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s11,s11,s11,s11,s11,s11,s11,s11}, // s11: pub? tok+ b[]+ sem -> arr_dec
 void f_tok_bracket_sem(State* state) {
     state->phrase.type = arr_dec;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s12,s13,s12,s12,s12,s14,s14,s14}, // s12: pub? tok+ b[]+ asg
 void f_tok_bracket_asg(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_bracket_asg_sem(state); break;
@@ -747,18 +661,14 @@ void f_tok_bracket_asg(State* state) {
     }
 }
 
-//{s13,s13,s13,s13,s13,s13,s13,s13}, // s13: pub? tok+ b[]+ asg !sem* sem -> arr_def
 void f_tok_bracket_asg_sem(State* state) {
     state->phrase.type = arr_def;
 }
 
-//{s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
 void f_err(State* state) {
     state->phrase.type = error;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s20,s14,s14,s21,s14,s14,s14,s14}, // s15: pub? tok("struct"|"union")
 void f_struct_union_enum(State* state) {
     switch (symbol(state)) {
         case tok: f_struct_union_enum_tok(next(state)); break;
@@ -767,13 +677,10 @@ void f_struct_union_enum(State* state) {
     }
 }
 
-//{s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_or_union_def
 void f_struct_union_enum_sem(State* state) {
-    state->phrase.type = struct_or_union_def;
+    state->phrase.type = struct_union_enum_def;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s17,s18,s17,s17,s17,s17,s17,s14}, // s17: pub? tok("typedef")
 void f_typedef(State* state) {
     switch (symbol(state)) {
         case sem: f_typedef_sem(state); break;
@@ -782,19 +689,14 @@ void f_typedef(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s18,s18,s18,s18,s18,s18,s18,s18}, // s18: type_def
 void f_typedef_sem(State* state) {
     state->phrase.type = type_def;
 }
 
-//{s19,s19,s19,s19,s19,s19,s19,s19}, // s19: pub? pre
 void f_pre(State* state) {
     state->phrase.type = preproc;
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s14,s16,s14,s21,s14,s14,s14,s14}, // s20: pub? tok("struct"|"union") tok
 void f_struct_union_enum_tok(State* state) {
     switch (symbol(state)) {
         case sem: f_struct_union_enum_sem(state); break;
@@ -803,8 +705,6 @@ void f_struct_union_enum_tok(State* state) {
     }
 }
 
-// tok,sem,b(),b{},b[],asg,pub,pre
-//{s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
 void f_struct_union_enum_curly(State* state) {
     switch (symbol(state)) {
         case sem: f_struct_union_enum_sem(state); break;
@@ -833,6 +733,9 @@ Phrase get_phrase(Element* list) {
     return state.phrase;
 }
 
+/*
+Prints the list of phrases.
+*/
 void print_phrases(Element* list) {
     require_not_null(list);
     Element* e = list;
@@ -840,7 +743,6 @@ void print_phrases(Element* list) {
         e = skip_whi_lbr_sem(e);
         if (e == NULL) break;
         Phrase phrase = get_phrase(e);
-        // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
         print_phrase(&phrase);
         e = phrase.last;
         if (e == NULL) break;
@@ -916,7 +818,7 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
                     xappend_string_until(&head, first, is_asg);
                     xappend_cstring(&head, ";\n");
                     break;
-                case struct_or_union_def:
+                case struct_union_enum_def:
                 case type_def:
                     xappend_cstring2(&head, first->begin, last->end);
                     xappend_char(&head, '\n');
@@ -942,6 +844,10 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
     return head;
 }
 
+/*
+If phrase is a function definition or a function declaration, returns the
+function name. Otherwise returns the empty string.
+*/
 String fun_name(Phrase phrase) {
     if (phrase.type == fun_def || phrase.type == fun_dec) {
         // last token in phrase is function name
@@ -957,6 +863,7 @@ String fun_name(Phrase phrase) {
     }
     return make_string("");
 }
+
 /*
 Creates implementation file contents for the given list of elements. Maintain
 the line numbers line numbers of the original contents.
@@ -999,7 +906,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
                 case arr_def:
                     xappend_cstring2(&impl, first->begin, last->end);
                     break;
-                case struct_or_union_def:
+                case struct_union_enum_def:
                 case type_def:
                 case preproc:
                     lines = count_lines(first->begin, last->end);
@@ -1030,7 +937,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
                     xappend_cstring(&impl, "static ");
                     xappend_cstring2(&impl, first->begin, last->end);
                     break;
-                case struct_or_union_def:
+                case struct_union_enum_def:
                 case type_def:
                 case preproc:
                     xappend_cstring2(&impl, first->begin, last->end);
@@ -1093,21 +1000,6 @@ int main(int argc, char* argv[]) {
     Phrase phrase = get_phrase(elements.first);
     printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
     print_phrase(&phrase);
-#endif
-
-#if 0
-    Element* e = elements.first;
-    while (e != NULL) {
-        e = skip_whi_lbr_sem(e);
-        if (e == NULL) break;
-        Phrase phrase = get_phrase(e);
-        // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
-        print_phrase(&phrase);
-        e = phrase.last;
-        if (e == NULL) break;
-        e = e->next;
-    }
-    exit(0);
 #endif
 
     if (DEBUG) print_phrases(elements.first);

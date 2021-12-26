@@ -22,12 +22,12 @@ into Phrases.
 
 The possible Elements are: error, whitespace, token (including string literal
 and character literal), preprocessor directive, line comment, block comment,
-semicolon, line break, brace (parentheses, brackets, curly braces, or any
-closing brace), assignment character '=', public signifier '*', or end of
+semicolon, line break, pair of braces (parentheses, brackets, curly braces, or
+any closing brace), assignment character '=', public signifier '*', or end of
 source.
 
 The possible Phrases are: error, fun_dec, fun_def, var_dec, var_def, arr_dec,
-arr_def, struct_or_union_def, type_def, preproc, line_comment, block_comment
+arr_def, struct_union_enum_def, type_def, preproc, line_comment, block_comment
 */
 typedef enum ElementType ElementType;
 enum ElementType { 
@@ -37,7 +37,6 @@ enum ElementType {
 };
 
 /*
-pub = /lbr /{bco} "*".             lbr and bco do not belong to pub
 whi = whichar {whi_char}.
 whi_char = " " | "\t".
 str = """ {str_char} """.
@@ -49,22 +48,30 @@ lbr = "\n".
 lco = "//" {!lbr} /lbr.
 bco = "/+" {char} "+/".
 sem = ";".
+asg = "=".
 par = "(" exp ")".                 count number of enclosed braces
 bra = "[" exp "]".
 cur = "{" exp "}".
+clo = ")" | "]" | "}".
+pub = /lbr {/bco} "*".             lbr and bco do not belong to pub
+        public signifier must appear in the indentation region of a line, 
+        i.e. at the beginning of a line, optionally after whitespace and 
+        block comments
+eos = end_of_string.
+tok = anything else, terminated by any of the first chars of the other elements
 */
 
 typedef struct Element Element;
 struct Element {
     ElementType type;
-    char* begin;
+    char* begin; // inclusive
     char* end; // exclusive
     Element* next;
 };
 
 /*
 public = '*' in indentation_regin
-indentation_region = block_comment* public? block_comment*
+indentation_region = <line_start> block_comment* public? block_comment*
 code = (ind? (preproc 
              |func_decl 
              |func_def 
@@ -74,32 +81,33 @@ code = (ind? (preproc
              |arr_def
              |line_comment
              |block_comment
-             |struct_def
+             |struct_union_enum_def
              |typedef)) *
 
-element types: ind, tok, whi, pre, lco, bco, sem, lbr, bra, asg, pub
+element types: whi, tok, pre, lco, bco, sem, lbr, par, bra, cur, asg, pub, 
 
 preproc = '#' chars line_break(unquoted)
 
-func_decl = token+ parentheses_pair ';'
-func_def  = token+ parentheses_pair curly_pair
-var_decl = token+ ';'
-var_def  = token+ '=' token ';'
-arr_decl: token+, brackets+, semicolon
-arr_def: token+, brackets+, assign, braces, semicolon
+func_decl = token+ parentheses_pair ';'.
+func_def  = token+ parentheses_pair curly_pair.
+var_decl = token+ ';'.
+var_def  = token+ '=' token ';'.
+arr_decl = token+ brackets_pair+ ';'.
+arr_def = token+ brackets_pair+ '=' curly_pair';'.
 
-line_comment = '//' char line_break
-block_comment = '/+' chars '+/'
+line_comment = '//' char line_break.
+block_comment = '/+' chars '+/'.
 
-struct_def = 'struct' chars ';'
-union_def = 'union' chars ';'
-type_def = 'typedef' chars ';'
+struct_def = 'struct' chars ';'.
+union_def = 'union' chars ';'.
+union_def = 'enum' chars ';'.
+type_def = 'typedef' chars ';'.
 */
 
 typedef enum PhraseType PhraseType;
 enum PhraseType {
     unknown, error, fun_dec, fun_def, var_dec, var_def, arr_dec, arr_def, 
-    struct_or_union_def, type_def, preproc, line_comment, block_comment
+    struct_union_enum_def, type_def, preproc, line_comment, block_comment
 };
 
 typedef struct Phrase Phrase;
