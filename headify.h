@@ -20,10 +20,11 @@
 The source code string is parsed into Elements. The Elements are then grouped
 into Phrases.
 
-The possible Elements are: indentation, whitespace, token, string literal,
-character literal, preprocessor directive, line comment, block comment,
-semicolon, line break, brace (parentheses, brackets, or curly braces),
-assignment character '=', or public signifier '*'.
+The possible Elements are: error, whitespace, token (including string literal
+and character literal), preprocessor directive, line comment, block comment,
+semicolon, line break, brace (parentheses, brackets, curly braces, or any
+closing brace), assignment character '=', public signifier '*', or end of
+source.
 
 The possible Phrases are: error, fun_dec, fun_def, var_dec, var_def, arr_dec,
 arr_def, struct_or_union_def, type_def, preproc, line_comment, block_comment
@@ -37,9 +38,6 @@ enum ElementType {
 
 /*
 pub = /lbr /{bco} "*".             lbr and bco do not belong to pub
-tok = id_char1 {id_char}.
-id_char1 = letter | "_".
-id_char = id_char1 | digit.
 whi = whichar {whi_char}.
 whi_char = " " | "\t".
 str = """ {str_char} """.
@@ -97,14 +95,6 @@ struct_def = 'struct' chars ';'
 union_def = 'union' chars ';'
 type_def = 'typedef' chars ';'
 */
-
-typedef enum PhraseState PhraseState;
-enum PhraseState { 
-    s01, s02, s03, s04, s05, s06, s07, 
-    s08, s09, s10, s11, s12, s13, s14, 
-    s15, s16, s17, s18, s19, s20, s21, 
-    PhraseStateCount, 
-};
 
 typedef enum PhraseType PhraseType;
 enum PhraseType {

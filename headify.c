@@ -147,7 +147,7 @@ int count_lines(char* s, char* t) {
 }
 
 // Is the scanner in the indentation region at the beginning of a line?
-static bool indent = false;
+static bool indent = true;
 
 // Contains the error message in case of an error.
 static char* error_message = NULL;
@@ -362,6 +362,10 @@ void scan_next_test(void) {
     e = scan_next("#a\nb");
     test_equal_element(e, pre, "#a", "\nb");
 
+    indent = true;
+    e = scan_next("#a\\\nb\nc"); // line continuation
+    test_equal_element(e, pre, "#a\\\nb", "\nc");
+
     indent = false;
     e = scan_next("#a\nb");
     test_equal_element(e, tok, "#", "a\nb");
@@ -482,49 +486,35 @@ ElementList get_elements(char* filename, String source_code) {
     return elements;
 }
 
-#if 0
-// Checks if e is a brace.
-bool is_bra(Element* e) {
-    return e != NULL && e->type == bra;
-}
-
-// Checks if e is a token.
-bool is_tok(Element* e) {
-    return e != NULL && e->type == tok;
-}
-
-// Checks if e is a semicolon.
-bool is_sem(Element* e) {
-    return e != NULL && e->type == sem;
-}
-
 // Checks if e is an assignment.
 bool is_asg(Element* e) {
     return e != NULL && e->type == asg;
 }
 
-// Checks if e is a parentheses element (...).
-bool is_paren(Element* e) {
-    return e != NULL && e->type == bra && *e->begin == '(';
-}
-
-// Checks if e is a brackets element [...].
-bool is_bracket(Element* e) {
-    return e != NULL && e->type == bra && *e->begin == '[';
-}
-
 // Checks if e is a curly braces element {...}.
 bool is_curly(Element* e) {
-    return e != NULL && e->type == bra && *e->begin == '{';
+    return e != NULL && e->type == cur;
+}
+
+bool is_struct_union_enum(Element* e) {
+    String s = make_string2(e->begin, e->end - e->begin);
+    return cstring_equal(s, "struct") 
+        || cstring_equal(s, "union") 
+        || cstring_equal(s, "enum");
+}
+
+bool is_typedef(Element* e) {
+    String s = make_string2(e->begin, e->end - e->begin);
+    return cstring_equal(s, "typedef");
 }
 
 /*
 Returns the next element that is not one of {whi, lbr, ind}; or NULL if there
 is no such element.
 */
-Element* skip_whi_lbr_ind(Element* e) {
+Element* skip_whi_lbr(Element* e) {
     for (; e != NULL; e = e->next) {
-        if (e->type != whi && e->type != lbr && e->type != ind) {
+        if (e->type != whi && e->type != lbr) {
             return e;
         }
     }
@@ -535,50 +525,17 @@ Element* skip_whi_lbr_ind(Element* e) {
 Returns the next element that is not one of {whi, lbr, ind, sem}; or NULL if
 there is no such element.
 */
-Element* skip_whi_lbr_ind_sem(Element* e) {
+Element* skip_whi_lbr_sem(Element* e) {
     for (; e != NULL; e = e->next) {
-        if (e->type != whi && e->type != lbr && e->type != sem && e->type != ind) {
+        if (e->type != whi && e->type != lbr && e->type != sem) {
             return e;
         }
     }
     return e;
 }
-
-/*
-Returns the next element that is not one of {whi, lbr, ind, tok}; or NULL if
-there is no such element.
-*/
-Element* skip_whi_lbr_ind_tok(Element* e) {
-    for (; e != NULL; e = e->next) {
-        if (e->type != whi && e->type != lbr && e->type != tok && e->type != ind) {
-            return e;
-        }
-    }
-    return e;
-}
-
-/*
-Returns the next element that is not one of {whi, lbr, ind, lco, bco}; or NULL
-if there is no such element.
-*/
-Element* skip_whi_lbr_ind_lco_bco(Element* e) {
-    for (; e != NULL; e = e->next) {
-        if (e->type != whi && e->type != lbr && e->type != ind 
-                && e->type != lco && e->type != bco) {
-            return e;
-        }
-    }
-    return e;
-}
-
-static const char* PhraseStateNames[] = { 
-    "s01", "s02", "s03", "s04", "s05", "s06", "s07", 
-    "s08", "s09", "s10", "s11", "s12", "s13", "s14", 
-    "s15", "s16", "s17", "s18", "s19", "PhraseStateCount"
-};
 
 static const char* PhraseTypeNames[] = {
-    "error", "fun_dec", "fun_def", "var_dec", "var_def", "arr_dec", "arr_def", 
+    "unknown", "error", "fun_dec", "fun_def", "var_dec", "var_def", "arr_dec", "arr_def", 
     "struct_or_union_def", "type_def", "preproc", "line_comment", "block_comment"
 };
 
@@ -602,7 +559,6 @@ void print_phrase(Phrase* phrase) {
 /*
 State transition matrix for phrases. Each row represents a state. Each colum
 represents an input.
-*/
 const PhraseState phrases[PhraseStateCount][8] = {
 // tok,sem,b(),b{},b[],asg,pub,pre
   {s03,s14,s14,s14,s14,s14,s02,s19}, // s01: start
@@ -627,28 +583,29 @@ const PhraseState phrases[PhraseStateCount][8] = {
   {s14,s16,s14,s21,s14,s14,s14,s14}, // s20: pub? tok("struct"|"union") tok
   {s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
 };
+*/
 
 State* next(State* s) {
     Element* e = s->input;
-    require("valid input", e == NULL || (e->type != whi && e->type != lbr && e->type != ind));
+    require("valid input", e == NULL || (e->type != whi && e->type != lbr));
     if (e == NULL) return s;
     e = e->next;
-    e = skip_whi_lbr_ind(e);
+    e = skip_whi_lbr(e);
     s->input = e;
-    ensure("valid input", e == NULL || (e->type != whi && e->type != lbr && e->type != ind));
+    ensure("valid input", e == NULL || (e->type != whi && e->type != lbr));
     return s;
 }
 
 ElementType symbol(State* s) {
     Element* e = s->input;
-    if (e == NULL) return -1;
+    if (e == NULL) return eos;
     return e->type;
 }
 
 void f_start000(State* state) {
     Element* e = state->input;
     // skip initial whitespace
-    state->input = skip_whi_lbr_ind(state->input);
+    state->input = skip_whi_lbr(state->input);
     f_start(state); 
     Phrase* p = &state->phrase;
     if (p->type == error) {
@@ -669,11 +626,9 @@ void f_start(State* state) {
     switch (symbol(state)) {
         case tok: {
                 Element* e = state->input;
-                String s = make_string2(e->begin, e->end - e->begin);
-                if (cstring_equal(s, "struct") || cstring_equal(s, "union") 
-                        || cstring_equal(s, "enum")) {
+                if (is_struct_union_enum(e)) {
                     f_struct_union_enum(next(state));
-                } else if (cstring_equal(s, "typedef")) {
+                } else if (is_typedef(e)) {
                     f_typedef(next(state));
                 } else {
                     f_tok(next(state)); 
@@ -681,7 +636,7 @@ void f_start(State* state) {
             }
             break;
         case pub: f_pub(next(state)); break;
-        case pre: f_pre(next(state)); break;
+        case pre: f_pre(state); break;
         default: f_err(state); break;
     }
 }
@@ -694,18 +649,16 @@ void f_pub(State* state) {
     switch (symbol(state)) {
         case tok: {
                 Element* e = state->input;
-                String s = make_string2(e->begin, e->end - e->begin);
-                if (cstring_equal(s, "struct") || cstring_equal(s, "union") 
-                        || cstring_equal(s, "enum")) {
+                if (is_struct_union_enum(e)) {
                     f_struct_union_enum(next(state));
-                } else if (cstring_equal(s, "typedef")) {
+                } else if (is_typedef(e)) {
                     f_typedef(next(state));
                 } else {
                     f_tok(next(state)); 
                 }
             }
             break;
-        case pre: f_pre(next(state)); break;
+        case pre: f_pre(state); break;
         default: f_err(state); break;
     }
 }
@@ -713,19 +666,11 @@ void f_pub(State* state) {
 // tok,sem,b(),b{},b[],asg,pub,pre
 //{s03,s07,s04,s14,s10,s08,s14,s14}, // s03: pub? tok+
 void f_tok(State* state) {
-    Element* e = state->input;
     switch (symbol(state)) {
         case tok: f_tok(next(state)); break;
         case sem: f_tok_sem(state); break;
-        case bra: 
-            if (is_paren(e)) {
-                f_tok_paren(next(state));
-            } else if (is_bracket(e)) {
-                f_tok_bracket(next(state));
-            } else {
-                f_err(state);
-            }
-            break;
+        case par: f_tok_paren(next(state)); break;
+        case bra: f_tok_bracket(next(state)); break;
         case asg: f_tok_asg(next(state)); break;
         default: f_err(state); break;
     }
@@ -734,16 +679,9 @@ void f_tok(State* state) {
 // tok,sem,b(),b{},b[],asg,pub,pre
 //{s14,s05,s14,s06,s14,s14,s14,s14}, // s04: pub? tok+ b()
 void f_tok_paren(State* state) {
-    Element* e = state->input;
     switch (symbol(state)) {
         case sem: f_tok_paren_sem(state); break;
-        case bra: 
-            if (is_curly(e)) {
-                f_tok_paren_curly(state);
-            } else {
-                f_err(state);
-            }
-            break;
+        case cur: f_tok_paren_curly(state); break;
         default: f_err(state); break;
     }
 }
@@ -787,13 +725,7 @@ void f_tok_asg_sem(State* state) {
 void f_tok_bracket(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_bracket_sem(state); break;
-        case bra: 
-            if (is_bracket(state->input)) {
-                f_tok_bracket(next(state));
-            } else {
-                f_err(state);
-            }
-            break;
+        case bra: f_tok_bracket(next(state)); break;
         case asg: f_tok_bracket_asg(next(state)); break;
         default: f_err(state); break;
     }
@@ -811,7 +743,7 @@ void f_tok_bracket_asg(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_bracket_asg_sem(state); break;
         case asg: case pub: case pre: f_err(state); break;
-        default: f_tok_bracket_asg(state); break;
+        default: f_tok_bracket_asg(next(state)); break;
     }
 }
 
@@ -822,7 +754,7 @@ void f_tok_bracket_asg_sem(State* state) {
 
 //{s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
 void f_err(State* state) {
-    state->phrase.type = arr_def;
+    state->phrase.type = error;
 }
 
 // tok,sem,b(),b{},b[],asg,pub,pre
@@ -866,13 +798,7 @@ void f_pre(State* state) {
 void f_struct_union_enum_tok(State* state) {
     switch (symbol(state)) {
         case sem: f_struct_union_enum_sem(state); break;
-        case bra: 
-            if (is_curly(state->input)) {
-                f_struct_union_enum_curly(next(state));
-            } else {
-                f_err(state);
-            }
-            break;
+        case cur: f_struct_union_enum_curly(next(state)); break;
         default: f_err(state); break;
     }
 }
@@ -886,11 +812,14 @@ void f_struct_union_enum_curly(State* state) {
     }
 }
 
+/*
+Returns the next phrase starting at the given element.
+*/
 Phrase get_phrase(Element* list) {
     require_not_null(list);
     State state = (State){list, (Phrase){unknown, false, list, list}};
     // skip initial whitespace
-    state.input = skip_whi_lbr_ind(state.input);
+    state.input = skip_whi_lbr(state.input);
     f_start(&state); 
     Phrase* p = &state.phrase;
     if (p->type == error) {
@@ -904,84 +833,11 @@ Phrase get_phrase(Element* list) {
     return state.phrase;
 }
 
-
-
-/*
-Returns the next phrase starting at the given element.
-*/
-Phrase get_phrase0(Element* list) {
-    require_not_null(list);
-    Element* e = list;
-    if (e->type == pre) return (Phrase){preproc, false, e, e};
-    if (e->type == lco) return (Phrase){line_comment, false, e, e};
-    if (e->type == bco) return (Phrase){block_comment, false, e, e};
-    PhraseState state = s01;
-    PhraseState prev_state = s01;
-    bool public = false;
-    while (true) {
-        e = skip_whi_lbr_ind(e);
-        if (e == NULL) break;
-        int input = 0;
-        // element types: ind, tok, whi, pre, lco, bco, sem, lbr, bra, asg, pub
-        // element types: tok, pre, sem, bra, asg, pub
-        // printf("%s: ", ElementTypeName[e->type]);
-        // String ec = make_string2(e->begin, e->end - e->begin);
-        // println_string(ec);
-        switch (e->type) {
-            case tok: input = 0; break;
-            case sem: input = 1; break;
-            case bra: input = is_paren(e) ? 2 : (is_curly(e) ? 3 : 4); break;
-            case asg: input = 5; break;
-            case pub: input = 6; break;
-            case pre: input = 7; break;
-            default: input = -1; break;
-        }
-        // printf("input = %d\n", input);
-        if (input < 0) {
-            // printf("%d, %s\n", input, ElementTypeName[e->type]);
-            if (e->type == lco) {
-                return (Phrase){line_comment, public, list, e};
-            } else if (e->type == bco) {
-                return (Phrase){block_comment, public, list, e};
-            }
-            return (Phrase){error, public, e, e};
-        }
-        assert("valid input", 0 <= input && input < 8);
-        prev_state = state;
-        state = phrases[state][input];
-        assert("valid state", 0 <= state && state < PhraseStateCount);
-        switch (state) {
-            case s02: public = true; break;
-            case s03: if (prev_state != s03) {
-                    String s = make_string2(e->begin, e->end - e->begin);
-                    if (cstring_equal(s, "struct") || cstring_equal(s, "union") || cstring_equal(s, "enum")) {
-                        state = s15;
-                    } else if (cstring_equal(s, "typedef")) {
-                        state = s17;
-                    }
-                }
-                break;
-            case s05: return (Phrase){fun_dec, public, list, e};
-            case s06: return (Phrase){fun_def, public, list, e};
-            case s07: return (Phrase){var_dec, public, list, e};
-            case s09: return (Phrase){var_def, public, list, e};
-            case s11: return (Phrase){arr_dec, public, list, e};
-            case s13: return (Phrase){arr_def, public, list, e};
-            case s16: return (Phrase){struct_or_union_def, public, list, e};
-            case s18: return (Phrase){type_def, public, list, e};
-            case s19: return (Phrase){preproc, public, list, e};
-            default: break;
-        }
-        e = e->next;
-    }
-    return (Phrase){error, public, e, e};
-}
-
 void print_phrases(Element* list) {
     require_not_null(list);
     Element* e = list;
     while (e != NULL) {
-        e = skip_whi_lbr_ind_sem(e);
+        e = skip_whi_lbr_sem(e);
         if (e == NULL) break;
         Phrase phrase = get_phrase(e);
         // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
@@ -1020,7 +876,7 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
     xappend_cstring(&head, "_h_INCLUDED\n");
     Element* e = list;
     while (e != NULL) {
-        e = skip_whi_lbr_ind_sem(e);
+        e = skip_whi_lbr_sem(e);
         if (e == NULL) break;
         Phrase phrase = get_phrase(e);
         if (DEBUG) printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
@@ -1111,7 +967,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
     String impl = new_string(1024);
     Element* e = list;
     while (e != NULL) {
-        Element* f = skip_whi_lbr_ind_sem(e);
+        Element* f = skip_whi_lbr_sem(e);
         if (f == NULL) {
             xappend_cstring(&impl, e->begin);
             break;
@@ -1191,7 +1047,6 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
     }
     return impl;
 }
-#endif
 
 int main(int argc, char* argv[]) {
     // split_test();
@@ -1232,9 +1087,7 @@ int main(int argc, char* argv[]) {
 
     String source_code = read_file(filename.s);
     ElementList elements = get_elements(filename.s, source_code);
-    //if (DEBUG) 
-    print_elements(&elements);
-    exit(EXIT_FAILURE);
+    if (DEBUG) print_elements(&elements);
 
 #if 0
     Phrase phrase = get_phrase(elements.first);
@@ -1245,7 +1098,7 @@ int main(int argc, char* argv[]) {
 #if 0
     Element* e = elements.first;
     while (e != NULL) {
-        e = skip_whi_lbr_ind_sem(e);
+        e = skip_whi_lbr_sem(e);
         if (e == NULL) break;
         Phrase phrase = get_phrase(e);
         // printf("phrase = %s\n", PhraseTypeNames[phrase.type]);
@@ -1254,8 +1107,9 @@ int main(int argc, char* argv[]) {
         if (e == NULL) break;
         e = e->next;
     }
+    exit(0);
 #endif
-#if 0
+
     if (DEBUG) print_phrases(elements.first);
 
     String head = create_header(basename, elements.first);
@@ -1285,7 +1139,7 @@ int main(int argc, char* argv[]) {
     write_file(implname.s, impl);
     free(implname.s);
     free(impl.s);
-#endif
+
     elements_free(&elements);
     free(source_code.s);
     return 0;
