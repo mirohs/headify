@@ -12,6 +12,7 @@ make vector && ./vector
     int* data; }
 Vector;
 
+// line comment
 *Vector* vector_new(int capacity) {
     Vector* v = xcalloc(1, sizeof(Vector));
     v->capacity= capacity;
@@ -19,6 +20,9 @@ Vector;
     v->count = 0;
     return v; }
 
+/*
+Block comment.
+*/
 *void vector_free(Vector* v) {
     free(v->data);
     free(v); 

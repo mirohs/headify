@@ -671,7 +671,7 @@ void f_tok_bracket_asg_sem(State* state) {
 
 void f_struct_union_enum(State* state) {
     switch (symbol(state)) {
-        case sem: f_struct_union_enum_sem(next(state)); break;
+        case sem: f_struct_union_enum_sem(state); break;
         default: f_struct_union_enum(next(state)); break;
     }
 }
@@ -786,6 +786,7 @@ void get_phrase_test(void) {
     test_phrase("typedef char* (*f)(char*) MyFunc;X", type_def, false);
     test_phrase("*typedef struct {double x; double y;} Point;X", type_def, true);
     test_phrase("*typedef struct Point {double x; double y;} Point;X", type_def, true);
+    test_phrase("*typedef char[ID_LEN] Ident;", type_def, true);
 }
 
 /*
