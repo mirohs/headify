@@ -443,7 +443,7 @@ ElementList get_elements(char* filename, char* source_code) {
     while (e.type != eos) {
         if (e.type == err) {
             int line = count_line_breaks(source_code, error_pos) + 1;
-            printf("%s:%d: %s\n", filename, line, error_message);
+            fprintf(stderr, "%s:%d: %s\n", filename, line, error_message);
             exit(EXIT_FAILURE);
         }
         elements_append(&elements, new_element(e.type, e.begin, e.end));
@@ -510,7 +510,7 @@ static const char* PhraseTypeNames[] = {
 };
 
 /*
-Prints the phrase in the format [*PhraseType:<phrase contents>].followed by a
+Prints the phrase in the format [*PhraseType:<phrase contents>]. followed by a
 line break. The '*' indicates a public phrase.
 */
 void print_phrase(Phrase* phrase) {
@@ -555,7 +555,7 @@ ElementType symbol(State* s) {
 
 /*
 The following functions, named f_..., detect a Phrase from sequence of Elements.
-The functions implement a simple recusive descend parser.
+The functions implement a simple recusive descent parser.
 */
 
 void f_start(State* state) {
@@ -920,7 +920,7 @@ String fun_name(Phrase phrase) {
 }
 
 /*
-Creates implementation file contents for the given list of elements. Maintain
+Creates implementation file contents for the given list of elements. Maintains
 the line numbers line numbers of the original contents.
 */
 String create_impl(/*in*/String basename, /*in*/Element* list) {
