@@ -27,8 +27,9 @@ any closing brace), assignment character '=', public signifier '*', or end of
 source.
 
 The possible Phrases are: error, fun_dec, fun_def, var_dec, var_def, arr_dec,
-arr_def, struct_union_enum_def, type_def, preproc, line_comment, block_comment
+arr_def, struct_union_enum_def, type_def, preproc, line_comment, block_comment.
 */
+
 typedef enum ElementType ElementType;
 enum ElementType { 
     err, whi, tok, pre, lco, bco, sem, 
@@ -37,7 +38,7 @@ enum ElementType {
 };
 
 /*
-whi = whichar {whi_char}.
+whi = whi_char {whi_char}.
 whi_char = " " | "\t".
 str = """ {str_char} """.
 str_char = char | escaped_char.
@@ -70,38 +71,27 @@ struct Element {
 };
 
 /*
-public = '*' in indentation_regin
-indentation_region = <line_start> block_comment* public? block_comment*
-code = (ind? (preproc 
-             |func_decl 
-             |func_def 
-             |var_decl 
-             |var_def
-             |arr_decl 
-             |arr_def
-             |line_comment
-             |block_comment
-             |struct_union_enum_def
-             |typedef)) *
+- indentation_region = <line_start> block_comment* public? block_comment*
+- public = '*' in indentation_regin
+- preproc is only recognized in the indentation region
+- whitespace, line comments, and block comments may appear anywhere within a
+  phrase
 
 element types: whi, tok, pre, lco, bco, sem, lbr, par, bra, cur, asg, pub, 
 
-preproc = '#' chars line_break(unquoted)
-
-func_decl = token+ parentheses_pair ';'.
-func_def  = token+ parentheses_pair curly_pair.
-var_decl = token+ ';'.
-var_def  = token+ '=' token ';'.
-arr_decl = token+ brackets_pair+ ';'.
-arr_def = token+ brackets_pair+ '=' curly_pair';'.
-
-line_comment = '//' char line_break.
-block_comment = '/+' chars '+/'.
-
-struct_def = 'struct' chars ';'.
-union_def = 'union' chars ';'.
-union_def = 'enum' chars ';'.
-type_def = 'typedef' chars ';'.
+source_code = {phrase}.
+phrase = fun_dec | fun_def | var_dec | var_def | arr_dec | arr_def 
+       | struct_union_enum_def | typedef_def | preproc | error.
+fun_dec = [pub] tok {tok} par sem.
+fun_def = [pub] tok {tok} par cur.
+var_dec = [pub] tok {tok} sem.
+var_def = [pub] tok {tok} asg {!sem} sem.
+arr_dec = [pub] tok {tok} bra {bra} sem.
+arr_def = [pub] tok {tok} bra {bra} asg {!sem} sem.
+struct_union_enum_def = [pub] ("struct" | "union" | "enum") {!sem} sem.
+typedef_def = [pub] "typedef" {!sem} sem.
+preproc = [pub] "#" {!lbr} /lbr.
+error = anything not matching the above rules.
 */
 
 typedef enum PhraseType PhraseType;
@@ -120,8 +110,6 @@ struct Phrase {
 };
 
 typedef struct State State;
-typedef State (*StateTransition)(State state);
-
 struct State {
     Element* input;
     Phrase phrase;
@@ -141,25 +129,12 @@ void f_tok_bracket_sem(State* state); // arr_dec
 void f_tok_bracket_asg(State* state);
 void f_tok_bracket_asg_sem(State* state); // arr_def
 void f_struct_union_enum(State* state);
-void f_struct_union_enum_tok(State* state);
-void f_struct_union_enum_curly(State* state);
 void f_struct_union_enum_sem(State* state); // struct_union_enum_def
 void f_typedef(State* state);
 void f_typedef_sem(State* state); // typedef_def
 void f_pre(State* state); // preproc
+void f_lco(State* state); // line_comment
+void f_bco(State* state); // block_comment
 void f_err(State* state); // error
-
-/*
-source_code = {[pub] phrase}
-phrase = fun_dec | fun_def | var_dec | var_def | arr_dec | arr_def 
-       | struct_union_enum_def | typedef_def | preproc | error
-lbr = "\n"
-pub = lbr "*"
-ind = {" " | "\t"}   after lbr
-whi = {" " | "\t"}
-var_dec = [pub] tok {tok} sem
-var_def = [pub] tok {tok} asg {!sem} sem
-tok = (letter | "_") {letter | digit | "_"}
-*/
 
 #endif // headify_h_INCLUDED

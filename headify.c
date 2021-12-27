@@ -3,8 +3,6 @@
 @date: December 6, 2021
 */
 
-// https://www.freecodecamp.org/news/how-to-delete-a-git-branch-both-locally-and-remotely/
-
 #include "util.h"
 #include "headify.h"
 
@@ -21,8 +19,7 @@ generate_list(ElementList, Element, elements_, );
 
 /*
 Creates a new dynamically allocated element of the given type extending from
-begin (inclusive) to end (exclusive). The next pointer is used to chain elements
-in a linked list.
+begin (inclusive) to end (exclusive).
 */
 Element* new_element(ElementType type, char* begin, char* end) {
 #if 0
@@ -49,8 +46,7 @@ Element* new_element(ElementType type, char* begin, char* end) {
 
 /*
 Returns a new element on the stack of the given type extending from begin
-(inclusive) to end (exclusive). The next pointer is used to chain elements in a
-linked list.
+(inclusive) to end (exclusive).
 */
 Element make_element(ElementType type, char* begin, char* end) {
     require("valid type", 0 <= type && type < ElementTypeCount);
@@ -69,7 +65,7 @@ void print_element(Element* e) {
 }
 
 /*
-Prints all of the elements in the elements list.
+Prints the elements of the list.
 */
 void print_elements(ElementList* list) {
     require_not_null(list);
@@ -91,7 +87,7 @@ bool braces_match(char bo, char bc) {
 /*
 Counts the number of line breaks between s (inclusive) and t (exclusive).
 */
-int count_lines(char* s, char* t) {
+int count_line_breaks(char* s, char* t) {
     require_not_null(s);
     require_not_null(t);
     int n = 0;
@@ -111,9 +107,10 @@ static char* error_message = NULL;
 static char* error_pos = NULL;
 
 /*
-Get next element from source code string.
+Gets the next element from the source text.
 */
 Element scan_next(char* s) {
+    require_not_null(s);
     char* t = s + 1;
     char c = *s;
     char d = *t;
@@ -139,6 +136,7 @@ Element scan_next(char* s) {
         }
         return make_element(pre, s, t);
     case ' ': case '\t': 
+        // indent state does not change for whitespace
         while (*t != '\0') {
             if (*t == '\\' && *(t + 1) == '\n') {
                 t += 2;
@@ -204,6 +202,7 @@ Element scan_next(char* s) {
             }
             return make_element(lco, s, t);
         } else if (d == '*') {
+            // indent state does not change for block comment
             t++;
             while (*t != '\0') {
                 if (*t == '*' && *(t + 1) == '/') {
@@ -215,6 +214,7 @@ Element scan_next(char* s) {
             error_pos = s;
             return make_element(err, s, t);
         } else {
+            indent = false; 
             return make_element(tok, s, t);
         }
     case '(': case '{': case '[':
@@ -228,7 +228,7 @@ Element scan_next(char* s) {
                 if (braces_match(c, *e.begin)) {
                     if (c == '(') return make_element(par, s, t);
                     if (c == '{') return make_element(cur, s, t);
-                    /* [ */ return make_element(bra, s, t);
+                    /* else '[' */ return make_element(bra, s, t);
                 } else {
                     error_message = "braces do not match";
                     error_pos = e.begin;
@@ -243,7 +243,7 @@ Element scan_next(char* s) {
         indent = false;
         return make_element(clo, s, t);
     default:
-        assert("not eos", c != '\0');
+        assert("not eos, at least one char in token", c != '\0');
         indent = false;
         while (*t != '\0') {
             switch (*t) {
@@ -266,6 +266,7 @@ Test function for an element.
 */
 #define test_equal_element(actual, type, content, follow) \
     base_test_equal_element(__FILE__, __LINE__, actual, type, content, follow)
+
 bool base_test_equal_element(const char* file, int line, Element e, ElementType type, 
         char* content, char* follow) {
     bool ok1 = base_test_equal_s(file, line, make_string2(e.begin, e.end - e.begin), content);
@@ -377,6 +378,15 @@ void scan_next_test(void) {
     test_equal_element(e, err, "[abc)", "x");
     printf("error = %s\n", error_message);
 
+    e = scan_next(")abc");
+    test_equal_element(e, clo, ")", "abc");
+
+    e = scan_next("}abc");
+    test_equal_element(e, clo, "}", "abc");
+
+    e = scan_next("]abc");
+    test_equal_element(e, clo, "]", "abc");
+
     e = scan_next("/*abc");
     test_equal_element(e, err, "/*abc", "");
     printf("error = %s\n", error_message);
@@ -423,15 +433,16 @@ void scan_next_test(void) {
 }
 
 /*
-Parses the source code string into a list of elements.
+Parses the source text into a list of elements.
 */
-ElementList get_elements(char* filename, String source_code) {
+ElementList get_elements(char* filename, char* source_code) {
     require_not_null(filename);
+    require_not_null(source_code);
     ElementList elements = {NULL, NULL};
-    Element e = scan_next(source_code.s);
+    Element e = scan_next(source_code);
     while (e.type != eos) {
         if (e.type == err) {
-            int line = count_lines(source_code.s, error_pos) + 1;
+            int line = count_line_breaks(source_code, error_pos) + 1;
             printf("%s:%d: %s\n", filename, line, error_message);
             exit(EXIT_FAILURE);
         }
@@ -453,6 +464,7 @@ bool is_curly(Element* e) {
 
 // Is the element a struct or union or enum token?
 bool is_struct_union_enum(Element* e) {
+    if (e == NULL || e->type != tok) return false;
     String s = make_string2(e->begin, e->end - e->begin);
     return cstring_equal(s, "struct") 
         || cstring_equal(s, "union") 
@@ -461,6 +473,7 @@ bool is_struct_union_enum(Element* e) {
 
 // Is the element a typedef token?
 bool is_typedef(Element* e) {
+    if (e == NULL || e->type != tok) return false;
     String s = make_string2(e->begin, e->end - e->begin);
     return cstring_equal(s, "typedef");
 }
@@ -475,7 +488,7 @@ Element* skip_whi_lbr(Element* e) {
             return e;
         }
     }
-    return e;
+    return NULL;
 }
 
 /*
@@ -488,7 +501,7 @@ Element* skip_whi_lbr_sem(Element* e) {
             return e;
         }
     }
-    return e;
+    return NULL;
 }
 
 static const char* PhraseTypeNames[] = {
@@ -498,7 +511,7 @@ static const char* PhraseTypeNames[] = {
 
 /*
 Prints the phrase in the format [*PhraseType:<phrase contents>].followed by a
-line break. A '*' indicates a public phrase.
+line break. The '*' indicates a public phrase.
 */
 void print_phrase(Phrase* phrase) {
     require_not_null(phrase);
@@ -514,35 +527,11 @@ void print_phrase(Phrase* phrase) {
 }
 
 /*
-State transition matrix for phrases. Each row represents a state. Each colum
-represents an input.
-const PhraseState phrases[PhraseStateCount][8] = {
-// tok,sem,b(),b{},b[],asg,pub,pre
-  {s03,s14,s14,s14,s14,s14,s02,s19}, // s01: start
-  {s03,s14,s14,s14,s14,s14,s02,s19}, // s02: pub
-  {s03,s07,s04,s14,s10,s08,s14,s14}, // s03: pub? tok+
-  {s14,s05,s14,s06,s14,s14,s14,s14}, // s04: pub? tok+ b()
-  {s05,s05,s05,s05,s05,s05,s05,s05}, // s05: pub? tok+ b() sem -> fun_dec
-  {s06,s06,s06,s06,s06,s06,s06,s06}, // s06: pub? tok+ b() b{} -> fun_def
-  {s09,s09,s09,s09,s09,s09,s09,s09}, // s07: pub? tok+ sem -> var_dec
-  {s08,s09,s08,s08,s08,s14,s08,s14}, // s08: pub? tok+ asg
-  {s09,s09,s09,s09,s09,s09,s09,s09}, // s09: pub? tok+ asg !sem* sem -> var_def
-  {s14,s11,s14,s14,s10,s12,s14,s14}, // s10: pub? tok+ b[]+
-  {s11,s11,s11,s11,s11,s11,s11,s11}, // s11: pub? tok+ b[]+ sem -> arr_dec
-  {s12,s13,s12,s12,s12,s14,s14,s14}, // s12: pub? tok+ b[]+ asg
-  {s13,s13,s13,s13,s13,s13,s13,s13}, // s13: pub? tok+ b[]+ asg !sem* sem -> arr_def
-  {s14,s14,s14,s14,s14,s14,s14,s14}, // s14: error
-  {s20,s14,s14,s21,s14,s14,s14,s14}, // s15: pub? tok("struct"|"union")
-  {s16,s16,s16,s16,s16,s16,s16,s16}, // s16: struct_union_enum_def
-  {s17,s18,s17,s17,s17,s17,s17,s14}, // s17: pub? tok("typedef")
-  {s18,s18,s18,s18,s18,s18,s18,s18}, // s18: type_def
-  {s19,s19,s19,s19,s19,s19,s19,s19}, // s19: pub? pre
-  {s14,s16,s14,s21,s14,s14,s14,s14}, // s20: pub? tok("struct"|"union") tok
-  {s14,s16,s14,s14,s14,s14,s14,s14}, // s21: pub? tok("struct"|"union") tok? b{}
-};
+Goes to next non-whitespace and non-linebreak element. Sets input to NULL if no
+such element exists.
 */
-
 State* next(State* s) {
+    require_not_null(s);
     Element* e = s->input;
     require("valid input", e == NULL || (e->type != whi && e->type != lbr));
     if (e == NULL) return s;
@@ -553,11 +542,21 @@ State* next(State* s) {
     return s;
 }
 
+/*
+Returns the current input symbol; or eos if the end of the input has been
+reached.
+*/
 ElementType symbol(State* s) {
+    require_not_null(s);
     Element* e = s->input;
     if (e == NULL) return eos;
     return e->type;
 }
+
+/*
+The following functions, named f_..., detect a Phrase from sequence of Elements.
+The functions implement a simple recusive descend parser.
+*/
 
 void f_start(State* state) {
     switch (symbol(state)) {
@@ -574,6 +573,8 @@ void f_start(State* state) {
             break;
         case pub: f_pub(next(state)); break;
         case pre: f_pre(state); break;
+        case lco: f_lco(state); break;
+        case bco: f_bco(state); break;
         default: f_err(state); break;
     }
 }
@@ -593,6 +594,8 @@ void f_pub(State* state) {
             }
             break;
         case pre: f_pre(state); break;
+        case lco: f_lco(state); break;
+        case bco: f_bco(state); break;
         default: f_err(state); break;
     }
 }
@@ -604,6 +607,7 @@ void f_tok(State* state) {
         case par: f_tok_paren(next(state)); break;
         case bra: f_tok_bracket(next(state)); break;
         case asg: f_tok_asg(next(state)); break;
+        case lco: case bco: f_tok(next(state)); break;
         default: f_err(state); break;
     }
 }
@@ -612,6 +616,7 @@ void f_tok_paren(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_paren_sem(state); break;
         case cur: f_tok_paren_curly(state); break;
+        case lco: case bco: f_tok_paren(next(state)); break;
         default: f_err(state); break;
     }
 }
@@ -631,7 +636,6 @@ void f_tok_sem(State* state) {
 void f_tok_asg(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_asg_sem(state); break;
-        case asg: case pre: f_err(state); break;
         default: f_tok_asg(next(state)); break;
     }
 }
@@ -645,6 +649,7 @@ void f_tok_bracket(State* state) {
         case sem: f_tok_bracket_sem(state); break;
         case bra: f_tok_bracket(next(state)); break;
         case asg: f_tok_bracket_asg(next(state)); break;
+        case lco: case bco: f_tok_bracket(next(state)); break;
         default: f_err(state); break;
     }
 }
@@ -656,7 +661,6 @@ void f_tok_bracket_sem(State* state) {
 void f_tok_bracket_asg(State* state) {
     switch (symbol(state)) {
         case sem: f_tok_bracket_asg_sem(state); break;
-        case asg: case pub: case pre: f_err(state); break;
         default: f_tok_bracket_asg(next(state)); break;
     }
 }
@@ -665,15 +669,10 @@ void f_tok_bracket_asg_sem(State* state) {
     state->phrase.type = arr_def;
 }
 
-void f_err(State* state) {
-    state->phrase.type = error;
-}
-
 void f_struct_union_enum(State* state) {
     switch (symbol(state)) {
-        case tok: f_struct_union_enum_tok(next(state)); break;
-        case sem: f_struct_union_enum_sem(state); break;
-        default: f_err(state); break;
+        case sem: f_struct_union_enum_sem(next(state)); break;
+        default: f_struct_union_enum(next(state)); break;
     }
 }
 
@@ -684,7 +683,6 @@ void f_struct_union_enum_sem(State* state) {
 void f_typedef(State* state) {
     switch (symbol(state)) {
         case sem: f_typedef_sem(state); break;
-        case pre: f_err(state); break;
         default: f_typedef(next(state)); break;
     }
 }
@@ -697,19 +695,16 @@ void f_pre(State* state) {
     state->phrase.type = preproc;
 }
 
-void f_struct_union_enum_tok(State* state) {
-    switch (symbol(state)) {
-        case sem: f_struct_union_enum_sem(state); break;
-        case cur: f_struct_union_enum_curly(next(state)); break;
-        default: f_err(state); break;
-    }
+void f_lco(State* state) {
+    state->phrase.type = line_comment;
 }
 
-void f_struct_union_enum_curly(State* state) {
-    switch (symbol(state)) {
-        case sem: f_struct_union_enum_sem(state); break;
-        default: f_err(state); break;
-    }
+void f_bco(State* state) {
+    state->phrase.type = block_comment;
+}
+
+void f_err(State* state) {
+    state->phrase.type = error;
 }
 
 /*
@@ -721,16 +716,76 @@ Phrase get_phrase(Element* list) {
     // skip initial whitespace
     state.input = skip_whi_lbr(state.input);
     f_start(&state); 
-    Phrase* p = &state.phrase;
-    if (p->type == error) {
-        switch (symbol(&state)) {
-            case lco: p->type = line_comment; break;
-            case bco: p->type = block_comment; break;
-            default: break;
-        }
-    }
     state.phrase.last = state.input;
     return state.phrase;
+}
+
+#define test_phrase(source_code, type, public) \
+    base_test_phrase(__FILE__, __LINE__, source_code, type, public)
+
+bool base_test_phrase(char* file, int line, char* s, PhraseType type, bool public) {
+    indent = true;
+    printf("\n%s\n", s);
+    ElementList elements = get_elements("", s);
+    // print_elements(&elements);
+    Phrase p = get_phrase(elements.first);
+    print_phrase(&p);
+    bool ok1 = base_test_equal_i(file, line, p.type, type);
+    if (!ok1) printf("\t\ttypes: actual = %s, expected = %s\n", 
+            PhraseTypeNames[p.type], PhraseTypeNames[type]);
+    bool ok2 = base_test_equal_i(file, line, p.is_public, public);
+    return ok1 && ok2;
+}
+
+void get_phrase_test(void) {
+    test_phrase("int i;X", var_dec, false);
+    test_phrase("*int i;X", var_dec, true);
+    test_phrase("int i=123;X", var_def, false);
+    test_phrase(" * int i=123;X", var_def, true);
+    test_phrase("int i=123, j = 2;X", var_def, false);
+    test_phrase("int i=123, *j;X", var_def, false);
+    test_phrase("int/*block comment*/i;X", var_dec, false);
+    test_phrase("int//comm \niii = 123;X", var_def, false);
+
+    test_phrase("char * abc;X", var_dec, false);
+    test_phrase("char * abc = \"abc\";X", var_def, false);
+    test_phrase("*char*abc=\"abc\";X", var_def, true);
+
+    test_phrase("int a[10];X", arr_dec, false);
+    test_phrase("int a[] = {1, 2, 3};X", arr_def, false);
+    test_phrase("*int a[2, 2] = {{1, 2}, {3, 4}};X", arr_def, true);
+
+    test_phrase("int f(int i);X", fun_dec, false);
+    test_phrase("int f(int i){return 2*i;}X", fun_def, false);
+    test_phrase("\n\n\t int \nf(int i)\n{\nreturn \n2*i;\n}\nX", fun_def, false);
+    test_phrase("static int * f(int* i, int (*g)(int,int)){return 2*i;}X", fun_def, false);
+
+    test_phrase("   // line comment\nX", line_comment, false);
+    test_phrase(" * // line comment\nX", line_comment, true);
+
+    test_phrase("  /* block comment */X", block_comment, false);
+    test_phrase("  */* block comment */X", block_comment, true);
+
+    test_phrase("      #abc", preproc, false);
+    test_phrase("  #abc\nX", preproc, false);
+    test_phrase("  #abc\\\ndef\nX", preproc, false);
+    test_phrase(" * #abc\\\ndef\nX", preproc, true);
+
+    test_phrase("struct s;X", struct_union_enum_def, false);
+    test_phrase("struct Point{int x; int y;};X", struct_union_enum_def, false);
+    test_phrase("*struct Point{int x[10]; int y;};X", struct_union_enum_def, true);
+
+    test_phrase("union s;X", struct_union_enum_def, false);
+    test_phrase("union Point{int x; int y;};X", struct_union_enum_def, false);
+    test_phrase("*union Point{int x[10]; int y;};X", struct_union_enum_def, true);
+
+    test_phrase("enum s;X", struct_union_enum_def, false);
+    test_phrase("*enum PhraseType{a, b=10, c, d};X", struct_union_enum_def, true);
+
+    test_phrase("typedef void* Any;X", type_def, false);
+    test_phrase("typedef char* (*f)(char*) MyFunc;X", type_def, false);
+    test_phrase("*typedef struct {double x; double y;} Point;X", type_def, true);
+    test_phrase("*typedef struct Point {double x; double y;} Point;X", type_def, true);
 }
 
 /*
@@ -787,7 +842,7 @@ String create_header(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_char(&head, '\n');
         if (phrase.type == error) {
             if (phrase.last != NULL) e = phrase.last;
-            int line = count_lines(list->begin, e->end) + 1;
+            int line = count_line_breaks(list->begin, e->end) + 1;
             fprintf(stderr, "%s:%d: Error\n", basename.s, line);
             exit(EXIT_FAILURE);
         }
@@ -889,7 +944,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
         if (DEBUG) xappend_char(&impl, '\n');
         if (phrase.type == error) {
             if (phrase.last != NULL) e = phrase.last;
-            int line = count_lines(list->begin, e->end) + 1;
+            int line = count_line_breaks(list->begin, e->end) + 1;
             fprintf(stderr, "%s:%d: Error\n", basename.s, line);
             exit(EXIT_FAILURE);
         }
@@ -909,7 +964,7 @@ String create_impl(/*in*/String basename, /*in*/Element* list) {
                 case struct_union_enum_def:
                 case type_def:
                 case preproc:
-                    lines = count_lines(first->begin, last->end);
+                    lines = count_line_breaks(first->begin, last->end);
                     for (int i = 0; i < lines; i++) xappend_char(&impl, '\n');
                     break;
                 default:
@@ -967,6 +1022,7 @@ int main(int argc, char* argv[]) {
     // append_test();
     // xappend_test();
     // scan_next_test();
+    // get_phrase_test();
     // exit(0);
 
     if (argc != 2) {
@@ -993,7 +1049,7 @@ int main(int argc, char* argv[]) {
             basename.len, basename.s); 
 
     String source_code = read_file(filename.s);
-    ElementList elements = get_elements(filename.s, source_code);
+    ElementList elements = get_elements(filename.s, source_code.s);
     if (DEBUG) print_elements(&elements);
 
 #if 0
