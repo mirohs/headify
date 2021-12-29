@@ -774,6 +774,8 @@ void get_phrase_test(void) {
     test_phrase("struct s;X", struct_union_enum_def, false);
     test_phrase("struct Point{int x; int y;};X", struct_union_enum_def, false);
     test_phrase("*struct Point{int x[10]; int y;};X", struct_union_enum_def, true);
+    test_phrase("struct { OPC opc; char* name; } on[] = { {1, \"1\"}, {2, \"2\"} };X", 
+                struct_union_enum_def, false);
 
     test_phrase("union s;X", struct_union_enum_def, false);
     test_phrase("union Point{int x; int y;};X", struct_union_enum_def, false);
@@ -787,6 +789,8 @@ void get_phrase_test(void) {
     test_phrase("*typedef struct {double x; double y;} Point;X", type_def, true);
     test_phrase("*typedef struct Point {double x; double y;} Point;X", type_def, true);
     test_phrase("*typedef char[ID_LEN] Ident;", type_def, true);
+
+
 }
 
 /*
