@@ -10,9 +10,9 @@ To support automatic extraction, a *public* specifier in the form of a single `*
 
 The following examples illustrate the idea.
 
-### module\_a.hy.c
+### module\_a.h.c
 
-The file `module_a.hy.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both functions are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
+The file `module_a.h.c` has the private integer array `a`and two public functions `get_a` and `set_a`. Note that both functions are marked with a `*` at the beginning of the line. Only the public functions will appear in the header file (the "interface") of the module.
 
 ```c
 #include <stdio.h>
@@ -48,7 +48,7 @@ int main(void) {
 
 ### module\_a.h
 
-The command `headify module_a.hy.c` generates the header file `module_a.h` and the implementation file `module_a.c`. These can then be compiled. Only the public entities appear in the header file.
+The command `headify module_a.h.c` generates the header file `module_a.h` and the implementation file `module_a.c`. These can then be compiled. Only the public entities appear in the header file.
 
 ```c
 #ifndef module_a_h_INCLUDED
@@ -94,7 +94,7 @@ int main(void) {
 }
 ```
 
-### module\_b.hy.c
+### module\_b.h.c
 
 Let's have a look at a second module, which uses the first one. 
 
@@ -132,7 +132,7 @@ int main(void) {
 
 The type definition is marked as public, but not the structure itself. Hence, the structure is an opaque entity in the interface, which is beneficial for information hiding. The constructor function `make_pair`and the two accessor functions `pair_x` and `pair_y` are also marked as public.
 
-The command `headify module_b.hy.c` will generate `module_b.h` and  `module_b.c`. 
+The command `headify module_b.h.c` will generate `module_b.h` and  `module_b.c`. 
 
 
 ### module\_b.h

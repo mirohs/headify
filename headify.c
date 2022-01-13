@@ -1038,12 +1038,11 @@ int main(int argc, char* argv[]) {
     // separate dirname and basename (without extension) from filename
     String filename = make_string(argv[1]);
     int idir = last_index_of_char(filename, '/') + 1;
-    int iext = last_index_of_char(filename, '.');
-    if (iext < 0) iext = filename.len;
     String dirname = make_string2(filename.s, idir);
+    bool ends_with_hc = ends_with(filename, make_string(".h.c"));
+    int iext = filename.len;
+    if (ends_with_hc) iext -= 4;
     String basename = make_string2(filename.s + idir, iext - idir);
-    bool ends_with_hy = ends_with(basename, make_string(".hy"));
-    if (ends_with_hy) basename.len -= 3;
     if (basename.len <= 0) {
         printf("Usage: headify <filename C file>\n");
         exit(EXIT_FAILURE);
@@ -1069,7 +1068,7 @@ int main(int argc, char* argv[]) {
     String headname = new_string(256);
     xappend_string(&headname, dirname);
     xappend_string(&headname, basename);
-    if (ends_with_hy) {
+    if (ends_with_hc) {
         xappend_cstring(&headname, ".h");
     } else {
         xappend_cstring(&headname, "_headify.h");
@@ -1083,7 +1082,7 @@ int main(int argc, char* argv[]) {
     String implname = new_string(256);
     xappend_string(&implname, dirname);
     xappend_string(&implname, basename);
-    if (ends_with_hy) {
+    if (ends_with_hc) {
         xappend_cstring(&implname, ".c");
     } else {
         xappend_cstring(&implname, "_headify.c");
