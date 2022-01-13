@@ -15,7 +15,7 @@ OBJECTS = $(SOURCES:.c=.o)
 headify: $(OBJECTS)
 	gcc $(CFLAGS) $(DEBUG) $(OBJECTS) -lm -o $@
 
-%.c: %.d.c
+%.c %.h: %.d.c
 	./headify $< > $@
 
 %.o: %.c
