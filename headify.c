@@ -617,11 +617,14 @@ void f_tok_paren(State* state) {
         case sem: f_tok_paren_sem(state); break;
         case cur: f_tok_paren_curly(state); break;
         case lco: case bco: f_tok_paren(next(state)); break;
+        // allow tok par tok par sem (for functions with attributes)
+        case tok: f_tok(next(state)); break;
         default: f_err(state); break;
     }
 }
 
 void f_tok_paren_sem(State* state) {
+    PL;
     state->phrase.type = fun_dec;
 }
 
