@@ -390,4 +390,22 @@ char* (second argument).
 /** Checks whether the actual value @c a is equal to the expected value @c e. */
 bool base_test_equal_s(const char *file, int line, String a, char* e);
 
+// Debugging
+
+#ifdef NO_DEBUG
+    #define PL
+    #define PLi(i)
+    #define PLs(s)
+    #define PLf(...)
+#else
+    #define PL printf("%s:%d\n", __func__, __LINE__)
+    #define PLi(i) printf("%s:%d: %d\n", __func__, __LINE__, i)
+    #define PLs(s) printf("%s:%d: %s\n", __func__, __LINE__, s)
+    #define PLf(...) {\
+        fprintf(stderr, "%s:%d: ", __func__, __LINE__);\
+        fprintf(stderr, __VA_ARGS__);\
+        fprintf(stderr, "\n");\
+    }
+#endif
+
 #endif // util_h_INCLUDED
