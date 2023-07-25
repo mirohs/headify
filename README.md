@@ -149,7 +149,7 @@ int pair_y(Pair p);
 
 ### module\_b.c
 
-In the implementation file, the type definition no longer appears, because it has moved to the header file. The line numbers are preserved (by keeping the line breaks after after any removed entities), so that line numbers in compiler error messages are meaningful in the original `.c` file. 
+In the implementation file, the type definition no longer appears, because it has moved to the header file. The line numbers are preserved (by keeping the line breaks after any removed entities), so that line numbers in compiler error messages are meaningful in the original `.c` file. 
 
 ```c
 #include <stdio.h>
