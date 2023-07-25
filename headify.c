@@ -168,7 +168,7 @@ Element scan_next(char* s) {
         return make_element(err, s, t);
     case '\'': 
         indent = false;
-         escape = false;
+        escape = false;
         while (*t != '\0') {
             if (!escape && *t == '\'') {
                 // treat character literals as tokens
@@ -510,7 +510,7 @@ static const char* PhraseTypeNames[] = {
 };
 
 /*
-Prints the phrase in the format [*PhraseType:<phrase contents>]. followed by a
+Prints the phrase in the format [*PhraseType:<phrase contents>] followed by a
 line break. The '*' indicates a public phrase.
 */
 void print_phrase(Phrase* phrase) {
@@ -624,7 +624,6 @@ void f_tok_paren(State* state) {
 }
 
 void f_tok_paren_sem(State* state) {
-    PL;
     state->phrase.type = fun_dec;
 }
 
@@ -792,8 +791,6 @@ void get_phrase_test(void) {
     test_phrase("*typedef struct {double x; double y;} Point;X", type_def, true);
     test_phrase("*typedef struct Point {double x; double y;} Point;X", type_def, true);
     test_phrase("*typedef char[ID_LEN] Ident;", type_def, true);
-
-
 }
 
 /*
@@ -929,7 +926,7 @@ String fun_name(Phrase phrase) {
 
 /*
 Creates implementation file contents for the given list of elements. Maintains
-the line numbers line numbers of the original contents.
+the line numbers of the original contents.
 */
 String create_impl(/*in*/String basename, /*in*/Element* list) {
     require_not_null(list);
